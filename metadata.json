@@ -1,0 +1,6 @@
+{
+  "name": "Controle de Falta de Estoque",
+  "description": "Aplicativo para controle de falta de estoque, contagem de produtos, importação de base de dados e geração de pedidos de compra com alertas de reposição e envio de e-mail.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
