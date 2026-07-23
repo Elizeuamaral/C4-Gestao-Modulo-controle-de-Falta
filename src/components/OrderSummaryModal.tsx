@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Mail, Copy, Check, FileSpreadsheet, Send, AlertCircle, ShoppingCart } from 'lucide-react';
-import { Product, OrderItem, Order } from '../types';
+import { Product, OrderItem } from '../types';
 
 interface OrderSummaryModalProps {
   products: Product[];
@@ -8,6 +8,7 @@ interface OrderSummaryModalProps {
   counts: Record<string, number>;
   onClose: () => void;
   onSubmitOrder: (email: string, reporterName: string, store: string, items: OrderItem[]) => void;
+  senderEmail: string;
   defaultEmail?: string;
 }
 
@@ -17,6 +18,7 @@ export default function OrderSummaryModal({
   counts,
   onClose,
   onSubmitOrder,
+  senderEmail,
   defaultEmail = 'elizeuamaral83@gmail.com'
 }: OrderSummaryModalProps) {
   const [email, setEmail] = useState(defaultEmail);
@@ -25,6 +27,7 @@ export default function OrderSummaryModal({
   const [copied, setCopied] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
+  const [sendError, setSendError] = useState('');
 
   // Generate order items list based on products filtered on screen
   const orderItems: OrderItem[] = products.map(prod => {
@@ -43,12 +46,13 @@ export default function OrderSummaryModal({
   });
 
   // Formatting Email Text Content
-  const generateEmailText = () => {
+  const generateEmailText = (reportDate = new Date()) => {
     let body = `PEDIDO DE REPOSIÇÃO DE ESTOQUE\n`;
     body += `Loja: ${store}\n`;
     body += `Responsável pela Contagem: ${reporterName || 'Não Informado'}\n`;
-    body += `Data do Relatório: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}\n`;
-    body += `E-mail Cadastrado para Notificação: ${email}\n`;
+    body += `Data do Relatório: ${reportDate.toLocaleDateString('pt-BR')} ${reportDate.toLocaleTimeString('pt-BR')}\n`;
+    body += `E-mail de Envio (Remetente): ${senderEmail || 'Não Informado'}\n`;
+    body += `E-mail Destinatário: ${email}\n`;
     body += `====================================================================================\n\n`;
     
     if (orderItems.length === 0) {
@@ -118,13 +122,8 @@ export default function OrderSummaryModal({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleMailto = () => {
-    const subject = encodeURIComponent(`Pedido de Reposição de Estoque - ${store} - ${new Date().toLocaleDateString('pt-BR')}`);
-    const body = encodeURIComponent(generateEmailText());
-    window.open(`mailto:${email}?subject=${subject}&body=${body}`);
-  };
-
   const handleDownloadXLS = () => {
+    const reportDate = new Date();
     const xlsHeader = `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
       <head>
@@ -152,8 +151,9 @@ export default function OrderSummaryModal({
       </head>
       <body>
         <div class="header-info">RELATÓRIO DE REPOSIÇÃO DE ESTOQUE - ${store}</div>
-        <div><b>Data:</b> ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</div>
+        <div><b>Data:</b> ${reportDate.toLocaleDateString('pt-BR')} ${reportDate.toLocaleTimeString('pt-BR')}</div>
         <div><b>Usuário Responsável:</b> ${reporterName || 'Não Informado'}</div>
+        <div><b>E-mail de Envio (Remetente):</b> ${senderEmail || 'Não Informado'}</div>
         <div><b>Destinatário de E-mail:</b> ${email}</div>
         <br/>
         <table>
@@ -202,21 +202,52 @@ export default function OrderSummaryModal({
     document.body.removeChild(link);
   };
 
-  const handleSimulateSubmit = (e: React.FormEvent) => {
+  const handleSubmitEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !reporterName.trim() || orderItems.length === 0) return;
+    if (!senderEmail.trim() || !email.trim() || !reporterName.trim() || orderItems.length === 0) {
+      setSendError('Preencha o e-mail de envio, o destinatário, o responsável e mantenha ao menos 1 item para envio.');
+      return;
+    }
 
     setSending(true);
-    
-    // Simulate server side email API post
-    setTimeout(() => {
-      setSending(false);
-      setSendSuccess(true);
+    setSendError('');
+
+    try {
+      const reportDate = new Date();
+      const subject = `Pedido de Reposição de Estoque - ${store} - ${reportDate.toLocaleDateString('pt-BR')}`;
+      const response = await fetch('/api/send-order-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          senderEmail: senderEmail.trim(),
+          recipientEmail: email.trim(),
+          subject,
+          body: generateEmailText(reportDate),
+          reportDate: reportDate.toISOString(),
+          reporterName: reporterName.trim(),
+          store,
+          items: orderItems
+        })
+      });
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        throw new Error(errorPayload?.error || 'Falha ao enviar e-mail via Gmail.');
+      }
+
       onSubmitOrder(email.trim(), reporterName.trim(), store, orderItems);
+      setSendSuccess(true);
+      setSending(false);
       setTimeout(() => {
         onClose();
-      }, 2500);
-    }, 1500);
+      }, 1800);
+    } catch (error) {
+      setSending(false);
+      setSendError(error instanceof Error ? error.message : 'Não foi possível enviar o e-mail.');
+      console.error('Falha ao enviar e-mail:', error);
+    }
   };
 
   return (
@@ -263,7 +294,7 @@ export default function OrderSummaryModal({
           <div className="space-y-5" id="modal-left-column">
             
             {/* Email Form */}
-            <form onSubmit={handleSimulateSubmit} className="space-y-4" id="email-notif-form">
+            <form onSubmit={handleSubmitEmail} className="space-y-4" id="email-notif-form">
               <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl space-y-3" id="email-config-card">
                 
                 {/* Store Selector (LOJA) */}
@@ -297,6 +328,20 @@ export default function OrderSummaryModal({
                     onChange={e => setReporterName(e.target.value)}
                     placeholder="Ex: Nome do Colaborador"
                     className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium text-slate-800 shadow-xs"
+                  />
+                </div>
+
+                {/* Recipient Email */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5 text-indigo-600" />
+                    E-mail de Envio (Remetente)
+                  </label>
+                  <input
+                    type="email"
+                    value={senderEmail}
+                    readOnly
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-100 text-slate-700 font-medium shadow-xs cursor-not-allowed"
                   />
                 </div>
 
@@ -376,7 +421,7 @@ export default function OrderSummaryModal({
                 ) : sending ? (
                   <>
                     <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0"></span>
-                    Enviando e-mail...
+                    Enviando via Gmail...
                   </>
                 ) : (
                   <>
@@ -385,6 +430,12 @@ export default function OrderSummaryModal({
                   </>
                 )}
               </button>
+              {sendError && (
+                <p className="text-[11px] text-rose-600 font-medium flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {sendError}
+                </p>
+              )}
             </form>
 
           </div>

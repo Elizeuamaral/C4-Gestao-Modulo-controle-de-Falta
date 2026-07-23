@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import { Product } from '../types';
 
 interface ExcelImporterProps {
-  onImport: (newProducts: Omit<Product, 'id'>[]) => void;
+  onImport: (newProducts: Product[]) => void;
 }
 
 export default function ExcelImporter({ onImport }: ExcelImporterProps) {
@@ -12,72 +12,90 @@ export default function ExcelImporter({ onImport }: ExcelImporterProps) {
   const [pasteText, setPasteText] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState('');
-  const [previewData, setPreviewData] = useState<Omit<Product, 'id'>[]>([]);
+  const [previewData, setPreviewData] = useState<Product[]>([]);
   const [error, setError] = useState('');
+
+  const normalizeStatusToActive = (statusValue: string): boolean => {
+    const normalized = statusValue.trim().toLowerCase();
+    return !(
+      normalized === 'inativo' ||
+      normalized === 'inativa' ||
+      normalized === 'false' ||
+      normalized === '0' ||
+      normalized === 'nao' ||
+      normalized === 'não'
+    );
+  };
+
+  const parseRows = (rows: string[][]) => {
+    if (rows.length < 2) {
+      throw new Error('O arquivo ou texto colado deve conter pelo menos uma linha de cabeçalho e uma de dados.');
+    }
+
+    const headers = rows[0].map((h) => h.trim().toLowerCase());
+    const indexMap = {
+      id: headers.findIndex(h => h === 'código/id' || h === 'codigo/id' || h === 'código' || h === 'codigo' || h === 'id'),
+      name: headers.findIndex(h => h === 'nome do produto' || h === 'produto' || h === 'nome'),
+      category: headers.findIndex(h => h === 'categoria'),
+      supplier: headers.findIndex(h => h === 'fornecedor'),
+      minStock: headers.findIndex(h => h === 'estoque necessário' || h === 'estoque necessario'),
+      unit: headers.findIndex(h => h === 'unidade' || h === 'un'),
+      status: headers.findIndex(h => h === 'status')
+    };
+
+    const requiredFields: Array<keyof typeof indexMap> = ['id', 'name', 'category', 'supplier', 'minStock', 'unit', 'status'];
+    const missing = requiredFields.filter((field) => indexMap[field] === -1);
+    if (missing.length > 0) {
+      throw new Error('Cabeçalho inválido. Use exatamente as colunas: Código/ID, Nome do Produto, Categoria, Fornecedor, Estoque Necessário, Unidade, Status.');
+    }
+
+    const products: Product[] = [];
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.length === 0) continue;
+
+      const id = String(row[indexMap.id] || '').trim();
+      const name = String(row[indexMap.name] || '').trim();
+      const category = String(row[indexMap.category] || '').trim();
+      const supplier = String(row[indexMap.supplier] || '').trim();
+      const unit = String(row[indexMap.unit] || '').trim();
+      const status = String(row[indexMap.status] || '').trim();
+      const minStockRaw = String(row[indexMap.minStock] || '').trim();
+      const minStock = parseInt(minStockRaw.replace(/[^\d]/g, ''), 10) || 0;
+
+      if (!id || !name || !category || !supplier || !unit || !status) continue;
+
+      products.push({
+        id,
+        name,
+        category,
+        supplier,
+        minStock,
+        unit,
+        active: normalizeStatusToActive(status)
+      });
+    }
+
+    if (products.length === 0) {
+      throw new Error('Nenhum produto válido encontrado para importação.');
+    }
+
+    return products;
+  };
 
   // Process CSV/TSV text
   const parseData = (text: string) => {
     try {
       const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-      if (lines.length < 2) {
-        throw new Error('O arquivo ou texto colado deve conter pelo menos uma linha de cabeçalho e uma de dados.');
-      }
-
       // Detect delimiter (tab or comma or semicolon)
       const headerLine = lines[0];
       let delimiter = ',';
       if (headerLine.includes('\t')) delimiter = '\t';
       else if (headerLine.includes(';')) delimiter = ';';
 
-      const headers = headerLine.split(delimiter).map(h => h.trim().toLowerCase());
-      
-      // Map expected header synonyms
-      // Expected fields: Produto, Quantidade Necessária, Categoria, Fornecedor, Unidade
-      const indexMap = {
-        name: headers.findIndex(h => h === 'produto' || h === 'nome' || h.includes('prod')),
-        minStock: headers.findIndex(h => h === 'quantidade necessária' || h === 'quantidade necessaria' || h === 'qtd' || h.includes('necess') || h.includes('min') || h.includes('estoq')),
-        category: headers.findIndex(h => h === 'categoria' || h.includes('categ')),
-        supplier: headers.findIndex(h => h === 'fornecedor' || h.includes('fornec')),
-        unit: headers.findIndex(h => h === 'unidade' || h === 'un' || h.includes('unid'))
-      };
-
-      if (indexMap.name === -1 || indexMap.minStock === -1) {
-        throw new Error(
-          'Não foi possível encontrar as colunas obrigatórias. Certifique-se de ter cabeçalhos como: "Produto" e "Quantidade Necessária".'
-        );
-      }
-
-      const products: Omit<Product, 'id'>[] = [];
-
-      for (let i = 1; i < lines.length; i++) {
-        const row = lines[i].split(delimiter);
-        if (row.length < 2) continue;
-
-        const name = row[indexMap.name]?.trim() || '';
-        const minStockStr = row[indexMap.minStock]?.trim() || '0';
-        // Remove formatting from numbers (e.g., Brazilian 1.000 or currency)
-        const cleanMinStock = minStockStr.replace(/[^\d]/g, '');
-        const minStock = parseInt(cleanMinStock, 10) || 0;
-
-        const category = indexMap.category !== -1 ? row[indexMap.category]?.trim() || 'Outros' : 'Outros';
-        const supplier = indexMap.supplier !== -1 ? row[indexMap.supplier]?.trim() || 'Outros' : 'Outros';
-        const unit = indexMap.unit !== -1 ? row[indexMap.unit]?.trim() || 'un' : 'un';
-
-        if (name) {
-          products.push({
-            name,
-            minStock,
-            supplier: supplier || 'Outros',
-            category: category || 'Outros',
-            unit: unit || 'un'
-          });
-        }
-      }
-
-      if (products.length === 0) {
-        throw new Error('Nenhum produto válido encontrado para importação.');
-      }
-
+      const rows = lines.map((line) => line.split(delimiter).map((cell) => cell.trim()));
+      const products = parseRows(rows);
       setPreviewData(products);
       setError('');
     } catch (err) {
@@ -126,64 +144,9 @@ export default function ExcelImporter({ onImport }: ExcelImporterProps) {
         const worksheet = workbook.Sheets[firstSheetName];
         
         // Convert sheet to raw array of arrays
-        const rawRows = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 });
-        
-        if (rawRows.length < 2) {
-          throw new Error('O arquivo deve conter pelo menos uma linha de cabeçalho e uma de dados.');
-        }
-
-        // Map headers
-        const headers = rawRows[0].map((h: any) => String(h || '').trim().toLowerCase());
-
-        const indexMap = {
-          name: headers.findIndex(h => h === 'produto' || h === 'nome' || h.includes('prod')),
-          minStock: headers.findIndex(h => h === 'quantidade necessária' || h === 'quantidade necessaria' || h === 'qtd' || h.includes('necess') || h.includes('min') || h.includes('estoq')),
-          category: headers.findIndex(h => h === 'categoria' || h.includes('categ')),
-          supplier: headers.findIndex(h => h === 'fornecedor' || h.includes('fornec')),
-          unit: headers.findIndex(h => h === 'unidade' || h === 'un' || h.includes('unid'))
-        };
-
-        if (indexMap.name === -1 || indexMap.minStock === -1) {
-          throw new Error(
-            'Não foi possível encontrar as colunas obrigatórias. Certifique-se de ter cabeçalhos como: "Produto" e "Quantidade Necessária".'
-          );
-        }
-
-        const products: Omit<Product, 'id'>[] = [];
-
-        for (let i = 1; i < rawRows.length; i++) {
-          const row = rawRows[i];
-          if (!row || row.length === 0) continue;
-
-          const name = String(row[indexMap.name] || '').trim();
-          if (!name) continue;
-
-          const minStockVal = row[indexMap.minStock];
-          let minStock = 0;
-          if (typeof minStockVal === 'number') {
-            minStock = minStockVal;
-          } else {
-            const cleanMinStock = String(minStockVal || '').replace(/[^\d]/g, '');
-            minStock = parseInt(cleanMinStock, 10) || 0;
-          }
-
-          const category = indexMap.category !== -1 ? String(row[indexMap.category] || '').trim() || 'Outros' : 'Outros';
-          const supplier = indexMap.supplier !== -1 ? String(row[indexMap.supplier] || '').trim() || 'Outros' : 'Outros';
-          const unit = indexMap.unit !== -1 ? String(row[indexMap.unit] || '').trim() || 'un' : 'un';
-
-          products.push({
-            name,
-            minStock,
-            category,
-            supplier,
-            unit
-          });
-        }
-
-        if (products.length === 0) {
-          throw new Error('Nenhum produto válido encontrado para importação.');
-        }
-
+        const rawRows = XLSX.utils.sheet_to_json<(string | number | null)[]>(worksheet, { header: 1 });
+        const rows = rawRows.map((row) => row.map((cell) => String(cell ?? '').trim()));
+        const products = parseRows(rows);
         setPreviewData(products);
         setError('');
       } catch (err) {
@@ -226,7 +189,7 @@ export default function ExcelImporter({ onImport }: ExcelImporterProps) {
             Importar de Planilha (Excel/CSV)
           </h3>
           <p className="text-xs text-slate-500 mt-1">
-            Importe sua lista de estoque necessário com rapidez.
+            Ao confirmar, a importação substitui toda a base atual de produtos.
           </p>
         </div>
         <div className="flex bg-slate-100 rounded-lg p-0.5" id="import-mode-tabs">
@@ -296,7 +259,7 @@ export default function ExcelImporter({ onImport }: ExcelImporterProps) {
             id="paste-area"
             value={pasteText}
             onChange={handlePasteChange}
-            placeholder="Produto&#9;Quantidade Necessária&#9;Categoria&#9;Fornecedor&#9;Unidade&#10;Coca Cola 2l&#9;10&#9;Bebidas&#9;Coca-Cola&#9;un&#10;Cerveja Lata&#9;24&#9;Bebidas&#9;Ambev&#9;un"
+            placeholder="Código/ID&#9;Nome do Produto&#9;Categoria&#9;Fornecedor&#9;Estoque Necessário&#9;Unidade&#9;Status&#10;1001&#9;Coca Cola 2L&#9;Bebidas&#9;Coca-Cola&#9;10&#9;un&#9;Ativo"
             className="w-full h-36 p-3 text-xs font-mono border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-slate-50/50"
           />
         </div>
@@ -367,7 +330,7 @@ export default function ExcelImporter({ onImport }: ExcelImporterProps) {
           <p className="font-medium text-slate-700 mb-1">Como deve ser seu arquivo ou dados copiados:</p>
           <ul className="list-disc list-inside space-y-0.5">
             <li>Deve ter uma linha de cabeçalho no topo.</li>
-            <li>Colunas recomendadas: <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Produto</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Quantidade Necessária</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Categoria</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Fornecedor</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Unidade</code>.</li>
+            <li>Colunas obrigatórias: <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Código/ID</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Nome do Produto</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Categoria</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Fornecedor</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Estoque Necessário</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Unidade</code> e <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Status</code>.</li>
             <li>Você pode simplesmente copiar uma tabela selecionada no Excel e colar no modo "Copiar e Colar".</li>
           </ul>
         </div>

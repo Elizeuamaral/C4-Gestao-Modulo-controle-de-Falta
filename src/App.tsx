@@ -112,30 +112,39 @@ export default function App() {
     triggerBanner(`Produto "${newProd.name}" cadastrado com sucesso!`);
   };
 
-  const handleImportProducts = (newProducts: Omit<Product, 'id'>[]) => {
-    // Check for exact duplicate names to avoid clutter, or import them.
-    const productsToAdd: Product[] = [];
-    const existingNames = new Set(products.map(p => p.name.toLowerCase().trim()));
+  const handleImportProducts = (importedProducts: Product[]) => {
+    const normalizedMap = new Map<string, Product>();
+    importedProducts.forEach((prod) => {
+      const normalizedId = String(prod.id || '').trim();
+      const normalizedName = String(prod.name || '').trim();
+      if (!normalizedId || !normalizedName) return;
 
-    newProducts.forEach((prod, index) => {
-      const cleanName = prod.name.trim();
-      if (!existingNames.has(cleanName.toLowerCase())) {
-        productsToAdd.push({
-          ...prod,
-          name: cleanName,
-          id: `${Date.now()}-${index}`
-        });
-      }
+      normalizedMap.set(normalizedId, {
+        id: normalizedId,
+        name: normalizedName,
+        category: String(prod.category || 'Outros').trim() || 'Outros',
+        supplier: String(prod.supplier || 'Outros').trim() || 'Outros',
+        minStock: Number(prod.minStock) || 0,
+        unit: String(prod.unit || 'un').trim() || 'un',
+        active: prod.active !== false
+      });
     });
 
-    if (productsToAdd.length === 0) {
-      triggerBanner('Todos os produtos do arquivo já existem na base atual!', 'info');
+    const normalizedProducts = Array.from(normalizedMap.values());
+    if (normalizedProducts.length === 0) {
+      triggerBanner('Nenhum produto válido encontrado para substituir a base atual.', 'info');
       return;
     }
 
-    const updated = [...products, ...productsToAdd];
-    saveProducts(updated);
-    triggerBanner(`${productsToAdd.length} novos produtos importados com sucesso!`);
+    saveProducts(normalizedProducts);
+
+    const refreshedCounts: Record<string, number> = {};
+    normalizedProducts.forEach((p) => {
+      refreshedCounts[p.id] = counts[p.id] ?? 0;
+    });
+    saveCounts(refreshedCounts);
+
+    triggerBanner(`Base substituída com sucesso: ${normalizedProducts.length} produtos carregados.`);
   };
 
   const handleDeleteProduct = (id: string) => {
@@ -257,7 +266,10 @@ export default function App() {
   // Confirm Delivery / Replenish Stock
   const handleConfirmReplenish = (orderId: string) => {
     const order = orders.find(o => o.id === orderId);
-    if (!order) return;
+    if (!order) {
+      triggerBanner('Pedido não encontrado para confirmação de reposição.', 'info');
+      return;
+    }
 
     // Update active stock count in state: Restore counted quantities of deficient items to full required capacity!
     const updatedCounts = { ...counts };
@@ -397,33 +409,33 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* User Email Config on Mobile */}
+                {/* Sender Email Config on Mobile */}
                 <div className="md:hidden flex items-center gap-1.5 text-xs bg-slate-800/80 border border-slate-700/80 rounded-xl px-2.5 py-1" id="header-user-mobile-panel">
                   <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   <input
                     type="email"
                     value={userEmail}
                     onChange={(e) => saveUserEmail(e.target.value)}
-                    placeholder="Seu e-mail"
+                    placeholder="E-mail de envio"
                     className="font-medium text-slate-200 bg-transparent focus:outline-hidden p-0 m-0 w-32 text-[11px]"
-                    title="Clique para editar o e-mail do usuário"
+                    title="E-mail de envio (remetente)"
                   />
                 </div>
               </div>
 
-              {/* Desktop Quick Action / User Email */}
+              {/* Desktop Quick Action / Sender Email */}
               <div className="hidden md:flex items-center gap-3" id="header-user-panel">
                 <div className="flex items-center gap-2 text-xs bg-slate-800/80 border border-slate-700/80 rounded-xl px-3 py-1.5">
                   <User className="w-4 h-4 text-slate-400 shrink-0" />
                   <div className="text-left">
-                    <span className="text-[9px] text-slate-400 block font-medium uppercase leading-none">Usuário Notificado</span>
+                    <span className="text-[9px] text-slate-400 block font-medium uppercase leading-none">E-mail de envio</span>
                     <input
                       type="email"
                       value={userEmail}
                       onChange={(e) => saveUserEmail(e.target.value)}
-                      placeholder="Seu e-mail"
+                      placeholder="Remetente Gmail"
                       className="font-semibold text-slate-200 bg-transparent focus:outline-hidden p-0 m-0 w-44 text-xs"
-                      title="Clique para editar o e-mail do usuário"
+                      title="E-mail de envio (remetente)"
                     />
                   </div>
                 </div>
@@ -537,6 +549,7 @@ export default function App() {
           products={orderProducts ?? products}
           totalProductsCount={products.length}
           counts={counts}
+          senderEmail={userEmail}
           onClose={() => {
             setShowOrderModal(false);
             setOrderProducts(null);

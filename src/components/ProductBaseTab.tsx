@@ -7,7 +7,7 @@ import { INITIAL_PRODUCTS, CATEGORIES, SUPPLIERS } from '../mockData';
 interface ProductBaseTabProps {
   products: Product[];
   onAddProduct: (prod: Omit<Product, 'id'>) => void;
-  onImportProducts: (newProducts: Omit<Product, 'id'>[]) => void;
+  onImportProducts: (newProducts: Product[]) => void;
   onDeleteProduct: (id: string) => void;
   onToggleActiveProduct?: (id: string) => void;
   onClearAllProducts: () => void;
