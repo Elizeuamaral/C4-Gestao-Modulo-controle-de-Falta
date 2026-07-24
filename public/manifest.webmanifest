@@ -1,24 +1,24 @@
 {
-  "name": "C4 Gestão - Controle de Falta de Estoque",
-  "short_name": "C4 Estoque",
-  "description": "Controle de falta de estoque com contagem, histórico e geração de pedido de reposição por e-mail.",
-  "start_url": "/",
-  "scope": "/",
-  "display": "standalone",
-  "orientation": "portrait-primary",
-  "background_color": "#f8fafc",
+  "name": "C4 Gestão - Controle de Faltas",
+  "short_name": "C4 Faltas",
+  "description": "Sistema de controle de falta de estoque",
   "theme_color": "#0e1626",
+  "background_color": "#f8fafc",
+  "display": "standalone",
+  "orientation": "portrait",
+  "start_url": "/C4-Gestao-Modulo-controle-de-Falta/",
+  "scope": "/C4-Gestao-Modulo-controle-de-Falta/",
   "icons": [
     {
-      "src": "/icons/icon-192.svg",
+      "src": "/C4-Gestao-Modulo-controle-de-Falta/icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icons/icon-512.svg",
+      "src": "/C4-Gestao-Modulo-controle-de-Falta/icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]
