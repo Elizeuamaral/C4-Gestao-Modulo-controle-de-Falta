@@ -1,459 +1,354 @@
 import React, { useState } from 'react';
-import { X, Mail, Copy, Check, FileSpreadsheet, Send, AlertCircle, ShoppingCart } from 'lucide-react';
+import { X, Send, Download, Copy, Check, AlertCircle, Mail, User, Store, FileSpreadsheet } from 'lucide-react';
 import { Product, OrderItem } from '../types';
+import { emailService } from '../services/emailService';
 
 interface OrderSummaryModalProps {
   products: Product[];
-  totalProductsCount?: number;
+  totalProductsCount: number;
   counts: Record<string, number>;
-  onClose: () => void;
-  onSubmitOrder: (email: string, reporterName: string, store: string, items: OrderItem[]) => void;
   senderEmail: string;
-  defaultEmail?: string;
+  onClose: () => void;
+  onSubmitOrder: (email: string, reporterName: string, store: string, items: OrderItem[]) => Promise<void>;
+  defaultEmail: string;
 }
 
 export default function OrderSummaryModal({
   products,
   totalProductsCount,
   counts,
+  senderEmail,
   onClose,
   onSubmitOrder,
-  senderEmail,
-  defaultEmail = 'elizeuamaral83@gmail.com'
+  defaultEmail
 }: OrderSummaryModalProps) {
-  const [email, setEmail] = useState(defaultEmail);
-  const [store, setStore] = useState<'Loja do Carmo' | 'Loja Rua 4'>('Loja do Carmo');
+  const [store, setStore] = useState('');
   const [reporterName, setReporterName] = useState('');
-  const [copied, setCopied] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [sendSuccess, setSendSuccess] = useState(false);
-  const [sendError, setSendError] = useState('');
+  const [recipientEmail, setRecipientEmail] = useState(defaultEmail);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Generate order items list based on products filtered on screen
-  const orderItems: OrderItem[] = products.map(prod => {
-    const countedQty = counts[prod.id] !== undefined ? counts[prod.id] : 0;
-    const purchaseQty = Math.max(0, prod.minStock - countedQty);
+  // Filtrar produtos com falta (countedQty < neededQty)
+  const filteredProducts = products.filter(p => {
+    const counted = counts[p.id] || 0;
+    return counted < p.minStock && p.active !== false;
+  });
+
+  // Gerar itens do pedido
+  const orderItems: OrderItem[] = filteredProducts.map(p => {
+    const counted = counts[p.id] || 0;
+    const needed = p.minStock;
+    const purchaseQty = needed - counted;
     return {
-      productId: prod.id,
-      productName: prod.name,
-      countedQty,
-      neededQty: prod.minStock,
-      purchaseQty,
-      unit: prod.unit,
-      supplier: prod.supplier,
-      category: prod.category
+      productId: p.id,
+      productName: p.name,
+      countedQty: counted,
+      neededQty: needed,
+      purchaseQty: purchaseQty,
+      unit: p.unit,
+      supplier: p.supplier,
+      category: p.category
     };
   });
 
-  // Formatting Email Text Content
-  const generateEmailText = (reportDate = new Date()) => {
-    let body = `PEDIDO DE REPOSIÇÃO DE ESTOQUE\n`;
-    body += `Loja: ${store}\n`;
-    body += `Responsável pela Contagem: ${reporterName || 'Não Informado'}\n`;
-    body += `Data do Relatório: ${reportDate.toLocaleDateString('pt-BR')} ${reportDate.toLocaleTimeString('pt-BR')}\n`;
-    body += `E-mail de Envio (Remetente): ${senderEmail || 'Não Informado'}\n`;
-    body += `E-mail Destinatário: ${email}\n`;
-    body += `====================================================================================\n\n`;
-    
-    if (orderItems.length === 0) {
-      body += `Nenhum produto filtrado na tela para reposição.\n\n`;
-      body += `Gerado automaticamente via Central de Falta de Estoque.`;
-      return body;
+  // Agrupar por fornecedor
+  const groupedBySupplier = orderItems.reduce((acc, item) => {
+    if (!acc[item.supplier]) {
+      acc[item.supplier] = [];
     }
+    acc[item.supplier].push(item);
+    return acc;
+  }, {} as Record<string, OrderItem[]>);
 
-    // Group items by supplier for neatness
-    const grouped: Record<string, typeof orderItems> = {};
-    orderItems.forEach(item => {
-      if (!grouped[item.supplier]) grouped[item.supplier] = [];
-      grouped[item.supplier].push(item);
-    });
+  // Gerar mensagem formatada
+  const generateMessage = () => {
+    const formattedDate = new Date().toLocaleString('pt-BR');
+    let message = `PEDIDO DE REPOSIÇÃO DE ESTOQUE\n`;
+    message += `${'='.repeat(50)}\n\n`;
+    message += `Loja: ${store || 'Não informada'}\n`;
+    message += `Responsável pela Contagem: ${reporterName || 'Não informado'}\n`;
+    message += `Data do Relatório: ${formattedDate}\n`;
+    message += `E-mail de Envio (Remetente): ${senderEmail}\n`;
+    message += `E-mail Destinatário: ${recipientEmail}\n\n`;
+    message += `${'='.repeat(50)}\n\n`;
+    message += `PRODUTOS EM FALTA:\n\n`;
 
-    Object.entries(grouped).forEach(([supplier, items]) => {
-      // Find maximum length for padding each column
-      let maxProductLen = 7; // Length of "Produto"
-      let maxCurrentLen = 10; // Length of "Qtd. Atual"
-      let maxMinLen = 15; // Length of "Mínimo Esperado"
-      let maxPurchaseLen = 22; // Length of "Quantidade para Compra"
-
-      items.forEach(item => {
-        const prodName = item.productName || '';
-        const currentQtyStr = `${item.countedQty} ${item.unit}`;
-        const minQtyStr = `${item.neededQty} ${item.unit}`;
-        const purchaseQtyStr = item.purchaseQty > 0 ? `+${item.purchaseQty} ${item.unit}` : `0 ${item.unit}`;
-
-        if (prodName.length > maxProductLen) maxProductLen = prodName.length;
-        if (currentQtyStr.length > maxCurrentLen) maxCurrentLen = currentQtyStr.length;
-        if (minQtyStr.length > maxMinLen) maxMinLen = minQtyStr.length;
-        if (purchaseQtyStr.length > maxPurchaseLen) maxPurchaseLen = purchaseQtyStr.length;
+    Object.entries(groupedBySupplier).forEach(([supplier, items]) => {
+      message += `FORNECEDOR: ${supplier}\n`;
+      message += `${'-'.repeat(40)}\n`;
+      items.forEach((item) => {
+        message += `Produto: ${item.productName}\n`;
+        message += `  Qtd. Atual: ${item.countedQty} ${item.unit}\n`;
+        message += `  Estoque Mínimo: ${item.neededQty} ${item.unit}\n`;
+        message += `  Quantidade para Compra: ${item.purchaseQty} ${item.unit}\n`;
+        message += `  Categoria: ${item.category}\n\n`;
       });
-
-      body += `FORNECEDOR: ${supplier}\n`;
-      
-      const colHeader1 = "Produto".padEnd(maxProductLen);
-      const colHeader2 = "Qtd. Atual".padEnd(maxCurrentLen);
-      const colHeader3 = "Mínimo Esperado".padEnd(maxMinLen);
-      const colHeader4 = "Quantidade para Compra".padEnd(maxPurchaseLen);
-
-      const dividerLen = maxProductLen + maxCurrentLen + maxMinLen + maxPurchaseLen + 9; // 3 spaces between cols (3 x 3)
-      const borderLine = "-".repeat(dividerLen);
-
-      body += `${borderLine}\n`;
-      body += `${colHeader1} | ${colHeader2} | ${colHeader3} | ${colHeader4}\n`;
-      body += `${borderLine}\n`;
-      
-      items.forEach(item => {
-        const prodName = (item.productName || '').padEnd(maxProductLen);
-        const currentQtyStr = `${item.countedQty} ${item.unit}`.padEnd(maxCurrentLen);
-        const minQtyStr = `${item.neededQty} ${item.unit}`.padEnd(maxMinLen);
-        const purchaseQtyStr = (item.purchaseQty > 0 ? `+${item.purchaseQty} ${item.unit}` : `0 ${item.unit}`).padEnd(maxPurchaseLen);
-
-        body += `${prodName} | ${currentQtyStr} | ${minQtyStr} | ${purchaseQtyStr}\n`;
-      });
-      body += `${borderLine}\n\n`;
     });
 
-    body += `Gerado automaticamente via Central de Falta de Estoque.`;
-    return body;
+    message += `${'='.repeat(50)}\n\n`;
+    message += `📎 Planilha anexa com todos os detalhes.\n`;
+    message += `✅ Solicitação gerada automaticamente pelo sistema C4 Gestão.`;
+    
+    return message;
   };
 
-  const handleCopyToClipboard = () => {
-    navigator.clipboard.writeText(generateEmailText());
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleDownloadXLS = () => {
-    const reportDate = new Date();
-    const xlsHeader = `
-      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-      <head>
-        <meta http-equiv="content-type" content="text/plain; charset=UTF-8"/>
-        <!--[if gte mso 9]>
-        <xml>
-          <x:ExcelWorkbook>
-            <x:ExcelWorksheets>
-              <x:ExcelWorksheet>
-                <x:Name>Relatório de Reposição</x:Name>
-                <x:WorksheetOptions>
-                  <x:DisplayGridlines/>
-                </x:WorksheetOptions>
-              </x:ExcelWorksheet>
-            </x:ExcelWorksheets>
-          </x:ExcelWorkbook>
-        </xml>
-        <![endif]-->
-        <style>
-          table { border-collapse: collapse; font-family: Arial, sans-serif; }
-          th { background-color: #4f46e5; color: white; font-weight: bold; border: 1px solid #cbd5e1; padding: 6px; text-align: left; }
-          td { border: 1px solid #cbd5e1; padding: 6px; }
-          .header-info { font-weight: bold; font-size: 14px; margin-bottom: 10px; }
-        </style>
-      </head>
-      <body>
-        <div class="header-info">RELATÓRIO DE REPOSIÇÃO DE ESTOQUE - ${store}</div>
-        <div><b>Data:</b> ${reportDate.toLocaleDateString('pt-BR')} ${reportDate.toLocaleTimeString('pt-BR')}</div>
-        <div><b>Usuário Responsável:</b> ${reporterName || 'Não Informado'}</div>
-        <div><b>E-mail de Envio (Remetente):</b> ${senderEmail || 'Não Informado'}</div>
-        <div><b>Destinatário de E-mail:</b> ${email}</div>
-        <br/>
-        <table>
-          <thead>
-            <tr>
-              <th>Produto</th>
-              <th>Quantidade Atual</th>
-              <th>Estoque Mínimo</th>
-              <th>Quantidade para Compra</th>
-              <th>Unidade</th>
-              <th>Fornecedor</th>
-              <th>Categoria</th>
-            </tr>
-          </thead>
-          <tbody>
-    `;
-
-    let xlsRows = '';
-    orderItems.forEach(item => {
-      xlsRows += `
-        <tr>
-          <td>${item.productName}</td>
-          <td style="text-align: right;">${item.countedQty}</td>
-          <td style="text-align: right;">${item.neededQty}</td>
-          <td style="text-align: right; font-weight: bold; color: #b91c1c;">${item.purchaseQty}</td>
-          <td>${item.unit}</td>
-          <td>${item.supplier}</td>
-          <td>${item.category}</td>
-        </tr>
-      `;
+  // Copiar texto
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('📋 Texto copiado para a área de transferência!');
+    }).catch(() => {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      alert('📋 Texto copiado para a área de transferência!');
     });
-
-    const xlsFooter = `
-          </tbody>
-        </table>
-      </body>
-      </html>
-    `;
-
-    const xlsBlob = new Blob([xlsHeader + xlsRows + xlsFooter], { type: 'application/vnd.ms-excel;charset=utf-8' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(xlsBlob);
-    link.setAttribute("download", `pedido_compra_${store.replace(/\s+/g, '_').toLowerCase()}_${new Date().toISOString().slice(0,10)}.xls`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
-  const handleSubmitEmail = async (e: React.FormEvent) => {
+  // Enviar pedido via Google Apps Script
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!senderEmail.trim() || !email.trim() || !reporterName.trim() || orderItems.length === 0) {
-      setSendError('Preencha o e-mail de envio, o destinatário, o responsável e mantenha ao menos 1 item para envio.');
+    
+    if (!store.trim()) {
+      setError('Por favor, informe a loja de origem.');
+      return;
+    }
+    if (!reporterName.trim()) {
+      setError('Por favor, informe quem fez a falta no estoque.');
+      return;
+    }
+    if (!recipientEmail.trim()) {
+      setError('Por favor, informe o e-mail do destinatário.');
+      return;
+    }
+    if (orderItems.length === 0) {
+      setError('Nenhum produto com falta para enviar.');
       return;
     }
 
-    setSending(true);
-    setSendError('');
+    setIsSubmitting(true);
+    setError(null);
+    setSuccessMessage(null);
 
     try {
-      const reportDate = new Date();
-      const subject = `Pedido de Reposição de Estoque - ${store} - ${reportDate.toLocaleDateString('pt-BR')}`;
-      const response = await fetch('/api/send-order-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          senderEmail: senderEmail.trim(),
-          recipientEmail: email.trim(),
-          subject,
-          body: generateEmailText(reportDate),
-          reportDate: reportDate.toISOString(),
-          reporterName: reporterName.trim(),
-          store,
-          items: orderItems
-        })
-      });
-
-      if (!response.ok) {
-        const errorPayload = await response.json().catch(() => ({}));
-        throw new Error(errorPayload?.error || 'Falha ao enviar e-mail via Gmail.');
+      // 1. Verificar se o serviço está configurado
+      if (!emailService.isConfigured()) {
+        setError('❌ Serviço de e-mail não configurado. Verifique o arquivo .env');
+        setIsSubmitting(false);
+        return;
       }
 
-      onSubmitOrder(email.trim(), reporterName.trim(), store, orderItems);
-      setSendSuccess(true);
-      setSending(false);
-      setTimeout(() => {
-        onClose();
-      }, 1800);
-    } catch (error) {
-      setSending(false);
-      setSendError(error instanceof Error ? error.message : 'Não foi possível enviar o e-mail.');
-      console.error('Falha ao enviar e-mail:', error);
+      // 2. Enviar via Google Apps Script
+      const result = await emailService.sendOrderEmail({
+        recipientEmail: recipientEmail,
+        reporterName: reporterName,
+        store: store,
+        items: orderItems,
+        senderEmail: senderEmail,
+        subject: `Solicitação de Compra - ${store}`
+      });
+
+      if (result.success) {
+        setSuccessMessage('✅ ' + (result.message || 'E-mail enviado com sucesso!'));
+        
+        // 3. Salvar no histórico
+        await onSubmitOrder(recipientEmail, reporterName, store, orderItems);
+        
+        // 4. Fechar após 2 segundos
+        setTimeout(() => {
+          onClose();
+        }, 2000);
+      } else {
+        setError('❌ ' + (result.error || 'Erro ao enviar e-mail.'));
+        setIsSubmitting(false);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao enviar pedido.');
+      setIsSubmitting(false);
+    } finally {
+      // Não setar isSubmitting false aqui porque pode fechar o modal
+      // O state será resetado pelo timeout ou pelo erro
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto" id="order-modal-backdrop">
-      <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200" id="order-modal-content">
-        
-        {/* Modal Header */}
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50" id="order-modal-header">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
-              <ShoppingCart className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="font-display font-semibold text-base text-slate-800" id="order-modal-title">
-                Fechar Contagem & Gerar Pedido
-              </h3>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
-                {totalProductsCount && products.length < totalProductsCount ? (
-                  <span className="inline-flex items-center gap-1 text-indigo-700 bg-indigo-50 border border-indigo-200/80 px-2 py-0.5 rounded-md font-semibold text-[11px]">
-                    Itens Filtrados na Tela: {products.length} de {totalProductsCount} produto(s)
-                  </span>
-                ) : (
-                  <span className="text-slate-500 text-[11px]">
-                    Produtos na Tela: {products.length} item(ns)
-                  </span>
-                )}
-              </p>
-            </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in">
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-slate-200 rounded-t-2xl p-4 flex items-center justify-between z-10">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <Send className="w-5 h-5 text-indigo-600" />
+              Fechar Contagem & Gerar Pedido
+            </h2>
+            <p className="text-xs text-slate-500">
+              Produtos na Tela: {totalProductsCount} item(ns) | Em falta: {orderItems.length} item(ns)
+            </p>
           </div>
           <button
-            type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-            id="btn-close-order-modal"
+            className="p-2 hover:bg-slate-100 rounded-xl transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5 text-slate-500" />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-6" id="order-modal-body">
-          
-          {/* Left: Configuration Form */}
-          <div className="space-y-5" id="modal-left-column">
-            
-            {/* Email Form */}
-            <form onSubmit={handleSubmitEmail} className="space-y-4" id="email-notif-form">
-              <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl space-y-3" id="email-config-card">
-                
-                {/* Store Selector (LOJA) */}
-                <div className="space-y-1.5">
-                  <label htmlFor="store-select" className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full"></span>
-                    Loja de Origem
-                  </label>
-                  <select
-                    id="store-select"
-                    value={store}
-                    onChange={e => setStore(e.target.value as 'Loja do Carmo' | 'Loja Rua 4')}
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium text-slate-800 shadow-xs"
-                  >
-                    <option value="Loja do Carmo">Loja do Carmo</option>
-                    <option value="Loja Rua 4">Loja Rua 4</option>
-                  </select>
-                </div>
+        {/* Body */}
+        <div className="p-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Mensagem de sucesso */}
+            {successMessage && (
+              <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-sm">
+                <Check className="w-4 h-4 shrink-0" />
+                {successMessage}
+              </div>
+            )}
 
-                {/* Operator / Reporter Name */}
-                <div className="space-y-1.5">
-                  <label htmlFor="reporter-name" className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full"></span>
-                    Quem fez a falta no estoque *
-                  </label>
-                  <input
-                    id="reporter-name"
-                    type="text"
-                    required
-                    value={reporterName}
-                    onChange={e => setReporterName(e.target.value)}
-                    placeholder="Ex: Nome do Colaborador"
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium text-slate-800 shadow-xs"
-                  />
-                </div>
-
-                {/* Recipient Email */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                    <Mail className="w-3.5 h-3.5 text-indigo-600" />
-                    E-mail de Envio (Remetente)
-                  </label>
-                  <input
-                    type="email"
-                    value={senderEmail}
-                    readOnly
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-100 text-slate-700 font-medium shadow-xs cursor-not-allowed"
-                  />
-                </div>
-
-                {/* Recipient Email */}
-                <div className="space-y-1.5">
-                  <label htmlFor="recipient-email" className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                    <Mail className="w-3.5 h-3.5 text-indigo-600" />
-                    E-mail do Destinatário
-                  </label>
-                  <input
-                    id="recipient-email"
-                    type="email"
-                    required
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="Seu e-mail cadastrado"
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium text-slate-800 shadow-xs"
-                  />
-                  <p className="text-[10px] text-slate-400 leading-normal">
-                    Este e-mail receberá os dados formatados com as quantidades em falta e diferenças de compra.
-                  </p>
-                </div>
+            {/* Campos do formulário */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  <Store className="w-4 h-4 inline mr-1" />
+                  Loja de Origem *
+                </label>
+                <input
+                  type="text"
+                  value={store}
+                  onChange={(e) => setStore(e.target.value)}
+                  placeholder="Ex: Loja do Carmo"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm"
+                  required
+                />
               </div>
 
-              {/* Action Grid Buttons */}
-              <div className="grid grid-cols-2 gap-2" id="utility-action-buttons">
-                <button
-                  type="button"
-                  onClick={handleCopyToClipboard}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 border border-slate-200 hover:bg-slate-50 active:bg-slate-100 rounded-xl text-slate-600 text-xs font-medium shadow-xs transition-colors cursor-pointer"
-                  id="btn-copy-email-draft"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="w-4 h-4 text-emerald-600" />
-                      Copiado!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-4 h-4 text-slate-400" />
-                      Copiar Texto
-                    </>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleDownloadXLS}
-                  disabled={orderItems.length === 0}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 border border-slate-200 hover:bg-slate-50 active:bg-slate-100 rounded-xl text-slate-600 text-xs font-medium shadow-xs transition-colors cursor-pointer"
-                  id="btn-download-order-xls"
-                >
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                  Baixar Excel
-                </button>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  <User className="w-4 h-4 inline mr-1" />
+                  Quem fez a falta no estoque *
+                </label>
+                <input
+                  type="text"
+                  value={reporterName}
+                  onChange={(e) => setReporterName(e.target.value)}
+                  placeholder="Seu nome completo"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm"
+                  required
+                />
               </div>
 
-              <button
-                type="submit"
-                disabled={sending || sendSuccess || orderItems.length === 0 || !reporterName.trim()}
-                className={`w-full flex items-center justify-center gap-2 px-4 py-3.5 text-white rounded-xl font-display font-semibold text-xs shadow-md transition-all cursor-pointer ${
-                  sendSuccess
-                    ? 'bg-emerald-600 hover:bg-emerald-600'
-                    : sending
-                      ? 'bg-indigo-400'
-                      : !reporterName.trim()
-                        ? 'bg-slate-300 cursor-not-allowed'
-                        : 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 hover:scale-[1.01]'
-                }`}
-                id="btn-submit-order"
-              >
-                {sendSuccess ? (
-                  <>
-                    <Check className="w-4 h-4 shrink-0" />
-                    Pedido Enviado com Sucesso!
-                  </>
-                ) : sending ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0"></span>
-                    Enviando via Gmail...
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4 shrink-0" />
-                    Enviar Pedido & Alerta de Reposição
-                  </>
-                )}
-              </button>
-              {sendError && (
-                <p className="text-[11px] text-rose-600 font-medium flex items-center gap-1.5">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  {sendError}
-                </p>
-              )}
-            </form>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  <Mail className="w-4 h-4 inline mr-1" />
+                  E-mail de Envio (Remetente)
+                </label>
+                <input
+                  type="email"
+                  value={senderEmail}
+                  disabled
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 text-slate-500 text-sm"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">E-mail configurado no sistema</p>
+              </div>
 
-          </div>
-
-          {/* Right: Live plain email layout description preview */}
-          <div className="flex flex-col h-full space-y-4" id="modal-right-column">
-            <div className="border border-slate-100 rounded-xl p-4 bg-slate-50 flex-1 flex flex-col justify-between" id="raw-email-preview">
-              <div className="flex-1 flex flex-col">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Esboço Técnico do E-mail</span>
-                <pre className="text-[10px] font-mono text-slate-600 bg-white p-3.5 rounded-lg overflow-auto flex-1 max-h-[300px] leading-relaxed select-all border border-slate-100">
-                  {generateEmailText()}
-                </pre>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  <Mail className="w-4 h-4 inline mr-1" />
+                  E-mail do Destinatário *
+                </label>
+                <input
+                  type="email"
+                  value={recipientEmail}
+                  onChange={(e) => setRecipientEmail(e.target.value)}
+                  placeholder="compras@empresa.com"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm"
+                  required
+                />
+                <p className="text-[10px] text-slate-400 mt-1">Este e-mail receberá os dados formatados com as quantidades em falta e diferenças de compra.</p>
               </div>
             </div>
-          </div>
 
+            {/* Botões de ação */}
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => copyToClipboard(generateMessage())}
+                className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-sm font-medium transition-colors"
+              >
+                <Copy className="w-4 h-4" />
+                Copiar Texto
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  alert('📎 O Excel será anexado ao e-mail automaticamente quando você enviar o pedido.');
+                }}
+                className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-sm font-medium transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                Baixar Excel
+              </button>
+            </div>
+
+            {/* Prévia da mensagem */}
+            <div className="border border-slate-200 rounded-xl p-4 bg-slate-50">
+              <h3 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4" />
+                ESBOÇO TÉCNICO DO E-MAIL
+              </h3>
+              <pre className="text-xs text-slate-600 whitespace-pre-wrap font-mono bg-white p-3 rounded-lg border border-slate-100 max-h-60 overflow-y-auto">
+                {generateMessage()}
+              </pre>
+            </div>
+
+            {/* Lista de produtos por fornecedor */}
+            <div className="space-y-4">
+              {Object.entries(groupedBySupplier).map(([supplier, items]) => (
+                <div key={supplier} className="border border-slate-200 rounded-xl p-4">
+                  <h4 className="font-semibold text-slate-800 text-sm mb-2 bg-indigo-50 p-2 rounded-lg">
+                    🏷️ FORNECEDOR: {supplier}
+                  </h4>
+                  <div className="grid grid-cols-1 gap-1">
+                    {items.map((item) => (
+                      <div key={item.productId} className="flex justify-between text-sm py-1 border-b border-slate-100 last:border-0">
+                        <span className="text-slate-700 font-medium">{item.productName}</span>
+                        <span className="text-slate-500 text-xs">
+                          Atual: {item.countedQty} {item.unit} | Mín: {item.neededQty} {item.unit} | 🛒 {item.purchaseQty} {item.unit}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Erro */}
+            {error && (
+              <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-sm">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                {error}
+              </div>
+            )}
+
+            {/* Botão Enviar */}
+            <button
+              type="submit"
+              disabled={isSubmitting || orderItems.length === 0}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-400 text-white font-semibold rounded-xl transition-colors shadow-lg shadow-indigo-600/20"
+            >
+              <Send className="w-4 h-4" />
+              {isSubmitting ? 'Enviando...' : 'Enviar Pedido & Alerta de Reposição'}
+            </button>
+
+            <div className="text-xs text-slate-400 text-center space-y-1">
+              <p>💡 O e-mail será enviado automaticamente via Google Apps Script</p>
+              <p>📧 O destinatário receberá o e-mail com o relatório em Excel anexado</p>
+              <p>🔒 Não é necessário configurar senha de aplicativo Gmail</p>
+            </div>
+          </form>
         </div>
-
       </div>
     </div>
   );

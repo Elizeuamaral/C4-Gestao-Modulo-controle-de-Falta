@@ -1,23 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Database, ClipboardList, ShoppingCart, Activity, User, Sparkles, Zap, RotateCcw, Lock, AlertCircle, Settings } from 'lucide-react';
+import { ClipboardList, Activity, User, Sparkles, Zap, Lock, AlertCircle, Settings } from 'lucide-react';
 import { Product, OrderItem, Order } from './types';
 import { INITIAL_PRODUCTS } from './mockData';
 import ProductBaseTab from './components/ProductBaseTab';
 import StockCountTab from './components/StockCountTab';
 import OrderSummaryModal from './components/OrderSummaryModal';
 import OrderHistoryTab from './components/OrderHistoryTab';
+import { emailService } from './services/emailService';
 
 export default function App() {
   // Navigation State
   const [activeTab, setActiveTab] = useState<'counting' | 'database' | 'history'>('counting');
-  
+
   // Password protection state for "Configurações"
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [configPassword, setConfigPassword] = useState<string>('@Maral22');
   const [showInactive, setShowInactive] = useState<boolean>(false);
-  
+
   // App Core State (synchronized with localStorage)
   const [products, setProducts] = useState<Product[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -38,6 +39,13 @@ export default function App() {
       const storedUserEmail = localStorage.getItem('estoq_user_email');
       const storedConfigPassword = localStorage.getItem('estoq_config_password');
       const storedShowInactive = localStorage.getItem('estoq_show_inactive');
+
+      // Verificar se o serviço de e-mail está configurado
+      if (!emailService.isConfigured()) {
+        console.warn('⚠️ Serviço de e-mail não configurado. Verifique o arquivo .env');
+      } else {
+        console.log('✅ Serviço de e-mail configurado:', emailService.getApiUrl());
+      }
 
       let loadedProducts: Product[] = [];
       if (storedProducts) {
@@ -71,7 +79,7 @@ export default function App() {
 
   // Save changes helper
   const saveProducts = (updatedProducts: Product[]) => {
-    const sortedProducts = [...updatedProducts].sort((a, b) => 
+    const sortedProducts = [...updatedProducts].sort((a, b) =>
       a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })
     );
     setProducts(sortedProducts);
@@ -160,7 +168,7 @@ export default function App() {
   };
 
   const handleToggleActiveProduct = (id: string) => {
-    const updated = products.map(p => 
+    const updated = products.map(p =>
       p.id === id ? { ...p, active: p.active === false ? true : false } : p
     );
     saveProducts(updated);
@@ -243,8 +251,9 @@ export default function App() {
     triggerBanner('Todas as contagens foram zeradas para 0.', 'info');
   };
 
-  // Order Submission & Replenishment Alert Logic
-  const handleSubmitOrder = (email: string, reporterName: string, store: string, items: OrderItem[]) => {
+  // Order Submission - AGORA USA GOOGLE APPS SCRIPT
+  const handleSubmitOrder = async (email: string, reporterName: string, store: string, items: OrderItem[]) => {
+    // 1. Criar o pedido no histórico
     const newOrder: Order = {
       id: `PED-${Date.now()}`,
       createdAt: new Date().toISOString(),
@@ -252,15 +261,20 @@ export default function App() {
       reporterName: reporterName,
       store: store,
       items: items,
-      status: 'pending' // pending replenishment alert
+      status: 'pending'
     };
 
     const updatedOrders = [newOrder, ...orders];
     saveOrders(updatedOrders);
     
-    // Automatically switch view to history to show active replenishment alert
+    // 2. O envio do e-mail já é feito pelo OrderSummaryModal via Google Apps Script
+    // Esta função apenas salva no histórico
+    
+    // 3. Mudar para aba de histórico
     setActiveTab('history');
-    triggerBanner(`Pedido ${newOrder.id} gerado! Alerta de reposição ativo no histórico.`);
+    
+    // 4. Mostrar mensagem de sucesso
+    triggerBanner(`✅ Pedido ${newOrder.id} registrado no histórico!`, 'success');
   };
 
   // Confirm Delivery / Replenish Stock
@@ -271,10 +285,10 @@ export default function App() {
       return;
     }
 
-    // Update active stock count in state: Restore counted quantities of deficient items to full required capacity!
+    // Update active stock count in state
     const updatedCounts = { ...counts };
     order.items.forEach(item => {
-      updatedCounts[item.productId] = item.neededQty; // Received required purchase, so current count meets required stock!
+      updatedCounts[item.productId] = item.neededQty;
     });
     saveCounts(updatedCounts);
 
@@ -301,13 +315,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50/50 flex flex-col font-sans text-slate-800 antialiased" id="app-root">
-      
+
       {/* Top Banner Message */}
       {bannerMessage && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top duration-300 max-w-md w-[90%]" id="system-toast-alert">
           <div className={`p-4 rounded-xl shadow-lg border flex items-center gap-3 ${
-            bannerMessage.type === 'success' 
-              ? 'bg-emerald-600 border-emerald-500 text-white' 
+            bannerMessage.type === 'success'
+              ? 'bg-emerald-600 border-emerald-500 text-white'
               : 'bg-indigo-600 border-indigo-500 text-white'
           }`}>
             <Sparkles className="w-5 h-5 shrink-0" />
@@ -316,7 +330,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Password Authentication Modal for Consulta & Produtos */}
+      {/* Password Authentication Modal */}
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in" id="modal-password-overlay">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-5 animate-scale-up" id="modal-password-card">
@@ -381,14 +395,12 @@ export default function App() {
         </div>
       )}
 
-      {/* Sticky Top Header & Fixed Navigation Menu */}
+      {/* Sticky Top Header & Navigation */}
       <div className="sticky top-0 z-30 bg-slate-50 border-b border-slate-200/80 shadow-xs" id="fixed-top-menu-wrapper">
-        {/* Main App Navigation Header */}
         <header className="bg-[#0e1626] border-b border-slate-800 text-white shadow-md" id="app-header">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col md:flex-row items-center justify-between gap-4 py-3.5">
-              
-              {/* Logo, Title & Module Badge */}
+
               <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-[#00e676] text-slate-950 rounded-xl shadow-xs shrink-0" id="header-logo">
@@ -409,7 +421,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Sender Email Config on Mobile */}
                 <div className="md:hidden flex items-center gap-1.5 text-xs bg-slate-800/80 border border-slate-700/80 rounded-xl px-2.5 py-1" id="header-user-mobile-panel">
                   <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   <input
@@ -423,7 +434,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Desktop Quick Action / Sender Email */}
               <div className="hidden md:flex items-center gap-3" id="header-user-panel">
                 <div className="flex items-center gap-2 text-xs bg-slate-800/80 border border-slate-700/80 rounded-xl px-3 py-1.5">
                   <User className="w-4 h-4 text-slate-400 shrink-0" />
@@ -445,7 +455,6 @@ export default function App() {
           </div>
         </header>
 
-        {/* Navigation Tab Bar matching image style */}
         <div className="max-w-3xl mx-auto w-full px-4 py-2.5" id="nav-tabs-wrapper">
           <nav className="flex bg-white border border-slate-200/80 rounded-2xl p-1.5 shadow-xs justify-between gap-1.5" id="nav-tabs">
             <button
@@ -501,7 +510,6 @@ export default function App() {
       {/* Main Layout Container */}
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-3 pb-8" id="app-main-content">
         
-        {/* Dynamic Render Tab Contents */}
         {activeTab === 'counting' && (
           <StockCountTab
             products={products}
@@ -559,10 +567,11 @@ export default function App() {
         />
       )}
 
-      {/* Footer copyright */}
+      {/* Footer */}
       <footer className="bg-white border-t border-slate-100 py-6 text-center text-xs text-slate-400 mt-auto" id="app-footer">
         <p>© 2026 Controle de Falta de Estoque. Todos os direitos reservados.</p>
         <p className="text-[10px] text-slate-300 mt-1 font-mono">Status do Sistema: Pronto para Tablets & Celulares</p>
+        <p className="text-[10px] text-slate-300 mt-1">📧 Envio de e-mail via Google Apps Script</p>
       </footer>
 
     </div>
