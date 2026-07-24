@@ -23,7 +23,7 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [orders, setOrders] = useState<Order[]>([]);
-  const [userEmail, setUserEmail] = useState<string>('elizeuamaral83@gmail.com');
+  const [userEmail, setUserEmail] = useState<string>('sosbebidas000@gmail.com');
   const [orderProducts, setOrderProducts] = useState<Product[] | null>(null);
 
   // UI Control State
@@ -158,12 +158,9 @@ export default function App() {
   const handleDeleteProduct = (id: string) => {
     const updated = products.filter(p => p.id !== id);
     saveProducts(updated);
-
-    // Clean active count for deleted product
     const updatedCounts = { ...counts };
     delete updatedCounts[id];
     saveCounts(updatedCounts);
-
     triggerBanner('Produto removido da base.');
   };
 
@@ -267,13 +264,10 @@ export default function App() {
     const updatedOrders = [newOrder, ...orders];
     saveOrders(updatedOrders);
     
-    // 2. O envio do e-mail já é feito pelo OrderSummaryModal via Google Apps Script
-    // Esta função apenas salva no histórico
-    
-    // 3. Mudar para aba de histórico
+    // 2. Mudar para aba de histórico
     setActiveTab('history');
     
-    // 4. Mostrar mensagem de sucesso
+    // 3. Mostrar mensagem de sucesso
     triggerBanner(`✅ Pedido ${newOrder.id} registrado no histórico!`, 'success');
   };
 
@@ -285,14 +279,12 @@ export default function App() {
       return;
     }
 
-    // Update active stock count in state
     const updatedCounts = { ...counts };
     order.items.forEach(item => {
       updatedCounts[item.productId] = item.neededQty;
     });
     saveCounts(updatedCounts);
 
-    // Set order status to replenished
     const updatedOrders = orders.map(o => {
       if (o.id === orderId) {
         return { ...o, status: 'replenished' as const };
