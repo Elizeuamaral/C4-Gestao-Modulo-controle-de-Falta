@@ -18,42 +18,33 @@ interface EmailResponse {
 
 /**
  * Serviço para envio de e-mail via Google Apps Script
- * Substitui completamente o Nodemailer + Gmail SMTP
  */
 export class EmailService {
   private apiUrl: string;
   private senderEmail: string;
 
   constructor() {
-    // URL do Web App do Google Apps Script
     this.apiUrl = import.meta.env.VITE_APPS_SCRIPT_URL || '';
     this.senderEmail = import.meta.env.VITE_SENDER_EMAIL || '';
     
-    if (!this.apiUrl) {
-      console.warn('⚠️ VITE_APPS_SCRIPT_URL não configurado no .env');
-    }
-    
-    if (!this.senderEmail) {
-      console.warn('⚠️ VITE_SENDER_EMAIL não configurado no .env');
-    }
+    console.log('📧 EmailService inicializado:');
+    console.log('  ✅ API URL:', this.apiUrl ? 'Configurada' : '❌ FALTANDO');
+    console.log('  ✅ Sender Email:', this.senderEmail ? 'Configurado' : '❌ FALTANDO');
   }
 
-  /**
-   * Envia um e-mail com relatório em Excel anexado
-   * @param data - Dados do pedido
-   * @returns Promise<EmailResponse>
-   */
   async sendOrderEmail(data: EmailData): Promise<EmailResponse> {
     try {
+      console.log('📤 Iniciando envio de e-mail...');
+      
       // 1. Validar URL
       if (!this.apiUrl) {
         return {
           success: false,
-          error: 'URL do Google Apps Script não configurada. Verifique o arquivo .env'
+          error: 'URL do Google Apps Script não configurada'
         };
       }
 
-      // 2. Validar dados obrigatórios
+      // 2. Validar dados
       if (!data.recipientEmail || !data.reporterName || !data.store || !data.items.length) {
         return {
           success: false,
@@ -61,18 +52,12 @@ export class EmailService {
         };
       }
 
-      // 3. Validar e-mail do remetente
-      if (!this.senderEmail) {
-        return {
-          success: false,
-          error: 'E-mail de envio não configurado. Verifique o arquivo .env'
-        };
-      }
-
-      // 4. Gerar arquivo Excel em Base64
+      // 3. Gerar Excel em Base64
+      console.log('📊 Gerando Excel...');
       const excelBase64 = this.generateExcelBase64(data);
+      console.log('✅ Excel gerado (tamanho:', excelBase64.length, 'caracteres)');
 
-      // 5. Preparar payload
+      // 4. Preparar payload
       const payload = {
         recipientEmail: data.recipientEmail,
         reporterName: data.reporterName,
@@ -80,27 +65,33 @@ export class EmailService {
         items: data.items,
         senderEmail: this.senderEmail,
         subject: data.subject || `Solicitação de Compra - ${data.store}`,
-        excelBase64: excelBase64,
-        timestamp: new Date().toISOString()
+        excelBase64: excelBase64
       };
 
-      // 6. Enviar para o Google Apps Script
+      console.log('📤 Enviando para Apps Script...');
+      console.log('  - URL:', this.apiUrl);
+      console.log('  - Destinatário:', data.recipientEmail);
+
+      // 5. Enviar requisição
       const response = await fetch(this.apiUrl, {
         method: 'POST',
+        mode: 'cors',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
-        body: JSON.stringify(payload),
-        // Timeout de 30 segundos
-        signal: AbortSignal.timeout(30000)
+        body: JSON.stringify(payload)
       });
 
-      // 7. Processar resposta
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
+      console.log('📥 Status da resposta:', response.status);
 
+      // 6. Processar resposta
       const result = await response.json();
+      console.log('📥 Resposta:', result);
+
+      if (!response.ok) {
+        throw new Error(result.error || `HTTP ${response.status}`);
+      }
 
       return {
         success: result.success || false,
@@ -111,13 +102,9 @@ export class EmailService {
     } catch (error) {
       console.error('❌ Erro ao enviar e-mail:', error);
       
-      let errorMessage = 'Erro desconhecido ao enviar e-mail';
+      let errorMessage = 'Erro ao enviar e-mail';
       if (error instanceof Error) {
-        if (error.name === 'TimeoutError') {
-          errorMessage = 'Tempo limite excedido. O servidor demorou muito para responder.';
-        } else {
-          errorMessage = error.message;
-        }
+        errorMessage = error.message;
       }
       
       return {
@@ -127,36 +114,28 @@ export class EmailService {
     }
   }
 
-  /**
-   * Gera o arquivo Excel e retorna em Base64
-   */
   private generateExcelBase64(data: EmailData): string {
     try {
-      // Gerar o workbook
       const workbook = this.buildOrderWorkbook(data);
-      
-      // Gerar buffer
       const buffer = XLSX.write(workbook, { 
         type: 'array', 
         bookType: 'xlsx' 
       });
-
-      // Converter para Base64
-      const base64 = btoa(
-        String.fromCharCode(...new Uint8Array(buffer))
-      );
-
-      return base64;
-
+      
+      // Converter para Base64 de forma segura
+      const uint8Array = new Uint8Array(buffer);
+      let binary = '';
+      for (let i = 0; i < uint8Array.length; i++) {
+        binary += String.fromCharCode(uint8Array[i]);
+      }
+      return btoa(binary);
+      
     } catch (error) {
       console.error('❌ Erro ao gerar Excel:', error);
       throw new Error('Falha ao gerar o arquivo Excel');
     }
   }
 
-  /**
-   * Constrói o workbook do Excel
-   */
   private buildOrderWorkbook(data: EmailData): any {
     const { reporterName, store, items } = data;
     const formattedDate = new Date().toLocaleString('pt-BR');
@@ -200,20 +179,13 @@ export class EmailService {
     return workbook;
   }
 
-  /**
-   * Verifica se o serviço está configurado corretamente
-   */
   isConfigured(): boolean {
     return !!this.apiUrl && !!this.senderEmail;
   }
 
-  /**
-   * Obtém a URL do serviço (para debug)
-   */
   getApiUrl(): string {
     return this.apiUrl;
   }
 }
 
-// Exportar instância única (Singleton)
 export const emailService = new EmailService();
