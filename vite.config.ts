@@ -5,12 +5,13 @@ import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
+  // Carregar variáveis de ambiente
   const env = loadEnv(mode, process.cwd(), '');
   
-  console.log('📧 Variáveis de ambiente carregadas:');
+  console.log('📧 Variáveis carregadas:');
   console.log('  - Modo:', mode);
-  console.log('  - VITE_APPS_SCRIPT_URL:', env.VITE_APPS_SCRIPT_URL ? '✅ Configurada' : '❌ FALTANDO');
-  console.log('  - VITE_SENDER_EMAIL:', env.VITE_SENDER_EMAIL ? '✅ Configurado' : '❌ FALTANDO');
+  console.log('  - VITE_APPS_SCRIPT_URL:', env.VITE_APPS_SCRIPT_URL ? '✅ OK' : '❌ FALTANDO');
+  console.log('  - VITE_SENDER_EMAIL:', env.VITE_SENDER_EMAIL ? '✅ OK' : '❌ FALTANDO');
   
   return {
     base: '/C4-Gestao-Modulo-controle-de-Falta/',
@@ -45,22 +46,6 @@ export default defineConfig(({ mode }) => {
               purpose: 'any maskable'
             }
           ]
-        },
-        workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-          runtimeCaching: [
-            {
-              urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'google-fonts-cache',
-                expiration: {
-                  maxEntries: 10,
-                  maxAgeSeconds: 60 * 60 * 24 * 365
-                }
-              }
-            }
-          ]
         }
       })
     ],
@@ -81,6 +66,7 @@ export default defineConfig(({ mode }) => {
       sourcemap: true,
     },
 
+    // INJETAR VARIÁVEIS NO BUILD
     define: {
       'import.meta.env.VITE_APPS_SCRIPT_URL': JSON.stringify(env.VITE_APPS_SCRIPT_URL),
       'import.meta.env.VITE_SENDER_EMAIL': JSON.stringify(env.VITE_SENDER_EMAIL)

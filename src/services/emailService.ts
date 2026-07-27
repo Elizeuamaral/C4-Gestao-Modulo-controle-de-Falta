@@ -16,24 +16,22 @@ interface EmailResponse {
   error?: string;
 }
 
+// 🔧 URL FIXA DO APPS SCRIPT (FALLBACK)
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxUjNmtmzHWZRnwFLNQWMogAzSCek3saI3HoFtTuijr46dUL5u1KG8zdmumpGGJTqAJsg/exec';
+
 export class EmailService {
   private apiUrl: string;
   private senderEmail: string;
 
   constructor() {
-    // Acessar variáveis de ambiente
-    this.apiUrl = import.meta.env.VITE_APPS_SCRIPT_URL || '';
-    this.senderEmail = import.meta.env.VITE_SENDER_EMAIL || '';
+    // Tentar carregar do env, se não tiver, usar fallback
+    this.apiUrl = import.meta.env?.VITE_APPS_SCRIPT_URL || APPS_SCRIPT_URL;
+    this.senderEmail = import.meta.env?.VITE_SENDER_EMAIL || 'sosbebidas000@gmail.com';
     
     console.log('📧 EmailService inicializado:');
-    console.log('  - Modo:', import.meta.env.MODE);
     console.log('  - API URL:', this.apiUrl ? '✅ Configurada' : '❌ FALTANDO');
     console.log('  - Sender Email:', this.senderEmail ? '✅ Configurado' : '❌ FALTANDO');
-    
-    // Mostrar a URL parcialmente (apenas para debug)
-    if (this.apiUrl) {
-      console.log('  - URL:', this.apiUrl.substring(0, 50) + '...');
-    }
+    console.log('  - Modo:', import.meta.env?.MODE || 'desconhecido');
   }
 
   async sendOrderEmail(data: EmailData): Promise<EmailResponse> {
@@ -43,7 +41,7 @@ export class EmailService {
         console.error('❌ URL do Apps Script não configurada');
         return {
           success: false,
-          error: 'URL do Google Apps Script não configurada. Verifique o arquivo .env'
+          error: 'URL do Google Apps Script não configurada.'
         };
       }
 
@@ -55,19 +53,11 @@ export class EmailService {
         };
       }
 
-      // 3. Validar e-mail do remetente
-      if (!this.senderEmail) {
-        return {
-          success: false,
-          error: 'E-mail de envio não configurado. Verifique o arquivo .env'
-        };
-      }
-
-      // 4. Gerar Excel em Base64
+      // 3. Gerar Excel em Base64
       console.log('📊 Gerando Excel...');
       const excelBase64 = this.generateExcelBase64(data);
 
-      // 5. Preparar payload
+      // 4. Preparar payload
       const payload = {
         recipientEmail: data.recipientEmail,
         reporterName: data.reporterName,
@@ -82,7 +72,7 @@ export class EmailService {
       console.log('  - URL:', this.apiUrl);
       console.log('  - Destinatário:', data.recipientEmail);
 
-      // 6. Enviar usando modo no-cors
+      // 5. Enviar usando modo no-cors
       await fetch(this.apiUrl, {
         method: 'POST',
         mode: 'no-cors',
