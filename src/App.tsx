@@ -7,6 +7,7 @@ import StockCountTab from './components/StockCountTab';
 import OrderSummaryModal from './components/OrderSummaryModal';
 import OrderHistoryTab from './components/OrderHistoryTab';
 import { emailService } from './services/emailService';
+import InstallButton from './components/InstallButton';
 
 export default function App() {
   // Navigation State
@@ -23,7 +24,7 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [orders, setOrders] = useState<Order[]>([]);
-  const [userEmail, setUserEmail] = useState<string>('sosbebidas000@gmail.com');
+  const [userEmail, setUserEmail] = useState<string>('rt.comercio2026@gmail.com');
   const [orderProducts, setOrderProducts] = useState<Product[] | null>(null);
 
   // UI Control State
@@ -248,9 +249,8 @@ export default function App() {
     triggerBanner('Todas as contagens foram zeradas para 0.', 'info');
   };
 
-  // Order Submission - AGORA USA GOOGLE APPS SCRIPT
+  // Order Submission
   const handleSubmitOrder = async (email: string, reporterName: string, store: string, items: OrderItem[]) => {
-    // 1. Criar o pedido no histórico
     const newOrder: Order = {
       id: `PED-${Date.now()}`,
       createdAt: new Date().toISOString(),
@@ -263,11 +263,7 @@ export default function App() {
 
     const updatedOrders = [newOrder, ...orders];
     saveOrders(updatedOrders);
-    
-    // 2. Mudar para aba de histórico
     setActiveTab('history');
-    
-    // 3. Mostrar mensagem de sucesso
     triggerBanner(`✅ Pedido ${newOrder.id} registrado no histórico!`, 'success');
   };
 
@@ -302,7 +298,6 @@ export default function App() {
     triggerBanner('Registro de pedido excluído do histórico.', 'info');
   };
 
-  // Statistics calculation for badges
   const pendingOrdersCount = orders.filter(o => o.status === 'pending').length;
 
   return (
@@ -559,11 +554,15 @@ export default function App() {
         />
       )}
 
+      {/* Install Button - FIXO NO RODAPÉ */}
+      <InstallButton />
+
       {/* Footer */}
       <footer className="bg-white border-t border-slate-100 py-6 text-center text-xs text-slate-400 mt-auto" id="app-footer">
         <p>© 2026 Controle de Falta de Estoque. Todos os direitos reservados.</p>
         <p className="text-[10px] text-slate-300 mt-1 font-mono">Status do Sistema: Pronto para Tablets & Celulares</p>
         <p className="text-[10px] text-slate-300 mt-1">📧 Envio de e-mail via Google Apps Script</p>
+        <p className="text-[10px] text-slate-300 mt-1">📱 Instale o app para melhor experiência</p>
       </footer>
 
     </div>
