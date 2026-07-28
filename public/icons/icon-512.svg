@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#0e1626"/>
-  <rect x="54" y="54" width="404" height="404" rx="72" fill="#1f2937"/>
-  <text x="256" y="282" text-anchor="middle" font-size="152" font-family="Arial, sans-serif" fill="#34d399" font-weight="700">C4</text>
-  <text x="256" y="370" text-anchor="middle" font-size="56" font-family="Arial, sans-serif" fill="#cbd5e1">ESTOQUE</text>
-</svg>
