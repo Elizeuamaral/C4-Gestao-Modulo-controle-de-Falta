@@ -1,12 +1,21 @@
-import InstallBanner from './components/InstallBanner'; // ← ADICIONAR
+import React, { useState, useEffect } from 'react';
+import { ClipboardList, Activity, User, Sparkles, Zap, Lock, AlertCircle, Settings } from 'lucide-react';
+import { Product, OrderItem, Order } from './types';
+import { INITIAL_PRODUCTS } from './mockData';
+import ProductBaseTab from './components/ProductBaseTab';
+import StockCountTab from './components/StockCountTab';
+import OrderSummaryModal from './components/OrderSummaryModal';
+import OrderHistoryTab from './components/OrderHistoryTab';
+import { emailService } from './services/emailService';
+import InstallBanner from './components/InstallBanner'; // ← USAR O BANNER
 
 export default function App() {
-  // ... resto do código
+  // ... (TODO O CÓDIGO EXISTENTE - NÃO ALTERAR)
 
   return (
     <div className="min-h-screen bg-slate-50/50 flex flex-col font-sans text-slate-800 antialiased" id="app-root">
       
-      {/* ... resto do conteúdo */}
+      {/* ... (TODO O CÓDIGO EXISTENTE) */}
 
       {/* Install Banner - FIXO NO RODAPÉ */}
       <InstallBanner />
