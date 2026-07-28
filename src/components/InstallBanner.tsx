@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Download, X, Zap } from 'lucide-react';
+import { Download, X, Zap, CheckCircle } from 'lucide-react';
 
 export default function InstallBanner() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [showBanner, setShowBanner] = useState(false);
+  const [isInstalling, setIsInstalling] = useState(false);
 
   useEffect(() => {
-    // Verificar se já está instalado
+    // Verificar se já está instalado (PWA)
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
     setIsInstalled(isStandalone);
 
@@ -30,7 +31,7 @@ export default function InstallBanner() {
       return;
     }
 
-    // Android/Chrome
+    // Android/Chrome - capturar evento de instalação
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -39,19 +40,22 @@ export default function InstallBanner() {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
+    // Quando o app for instalado
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setShowBanner(false);
+      setIsInstalling(false);
+      localStorage.setItem('install_banner_dismissed', 'true');
     };
 
     window.addEventListener('appinstalled', handleAppInstalled);
 
-    // Fallback
+    // Fallback: mostrar após 2 segundos
     const timer = setTimeout(() => {
       if (!deferredPrompt && !isStandalone) {
         setShowBanner(true);
       }
-    }, 3000);
+    }, 2000);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -67,21 +71,30 @@ export default function InstallBanner() {
       return;
     }
 
-    // Android/Chrome
+    // Android/Chrome - instalação direta
     if (deferredPrompt) {
+      setIsInstalling(true);
       try {
+        // Mostrar o prompt de instalação
         deferredPrompt.prompt();
         const result = await deferredPrompt.userChoice;
+        
         if (result.outcome === 'accepted') {
+          console.log('✅ App instalado com sucesso!');
           setIsInstalled(true);
           setShowBanner(false);
+          localStorage.setItem('install_banner_dismissed', 'true');
+        } else {
+          console.log('❌ Instalação cancelada');
+          setIsInstalling(false);
         }
         setDeferredPrompt(null);
       } catch (error) {
         console.error('Erro ao instalar:', error);
+        setIsInstalling(false);
       }
     } else {
-      // Fallback
+      // Fallback para navegadores sem suporte
       const isChrome = /Chrome/.test(navigator.userAgent);
       if (isChrome) {
         alert('📱 Para instalar o app:\n\n1. Abra o Chrome\n2. Toque nos 3 pontinhos (menu)\n3. Selecione "Instalar aplicativo"');
@@ -96,7 +109,8 @@ export default function InstallBanner() {
     localStorage.setItem('install_banner_dismissed', 'true');
   };
 
-  if (!showBanner || isInstalled) {
+  // Se já estiver instalado, NÃO mostra o banner
+  if (isInstalled || !showBanner) {
     return null;
   }
 
@@ -125,10 +139,24 @@ export default function InstallBanner() {
           <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
             <button
               onClick={handleInstall}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/25 transition-all transform hover:scale-105 active:scale-95 text-sm"
+              disabled={isInstalling}
+              className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 font-bold rounded-xl shadow-lg transition-all transform hover:scale-105 active:scale-95 text-sm ${
+                isInstalling 
+                  ? 'bg-gray-500 cursor-not-allowed' 
+                  : 'bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700 text-white shadow-indigo-500/25'
+              }`}
             >
-              <Download className="w-4 h-4" />
-              <span>INSTALAR APP</span>
+              {isInstalling ? (
+                <>
+                  <span className="animate-spin">⏳</span>
+                  <span>INSTALANDO...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  <span>INSTALAR APP</span>
+                </>
+              )}
             </button>
             
             <button

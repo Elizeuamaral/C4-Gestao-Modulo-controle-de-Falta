@@ -6,8 +6,8 @@
   "background_color": "#f8fafc",
   "display": "standalone",
   "orientation": "portrait",
-  "start_url": "/C4-Gestao-Modulo-controle-de-Falta/",
   "scope": "/C4-Gestao-Modulo-controle-de-Falta/",
+  "start_url": "/C4-Gestao-Modulo-controle-de-Falta/",
   "icons": [
     {
       "src": "/C4-Gestao-Modulo-controle-de-Falta/icons/icon-192.png",
