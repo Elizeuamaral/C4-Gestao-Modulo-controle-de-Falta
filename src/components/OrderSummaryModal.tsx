@@ -17,21 +17,14 @@ interface OrderSummaryModalProps {
 const STORE_OPTIONS = [
   'Loja do Carmo',
   'Loja Rua 4',
-  'Loja Matriz',
-  'Loja Filial 1',
-  'Loja Filial 2',
-  'Loja Centro',
-  'Loja Norte',
-  'Loja Sul',
-  'Loja Leste',
-  'Loja Oeste'
+
 ];
 
 // E-mails sugeridos para o destinatário
 const EMAIL_SUGGESTIONS = [
   'rt.comercio2026@gmail.com',
   'sosbebidas000@gmail.com',
-  'compras@empresa.com'
+  'tyago.fenix@gmail.com'
 ];
 
 function OrderSummaryModal({
