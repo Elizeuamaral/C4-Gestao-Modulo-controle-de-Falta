@@ -13,19 +13,21 @@ interface OrderSummaryModalProps {
   defaultEmail: string;
 }
 
-// Lista de lojas predefinidas
+// Lista de lojas
 const STORE_OPTIONS = [
   'Loja do Carmo',
-  'Loja Rua 4',
-
+  'Loja Rua 4'
 ];
 
-// E-mails sugeridos para o destinatário
+// E-mails sugeridos
 const EMAIL_SUGGESTIONS = [
   'rt.comercio2026@gmail.com',
   'sosbebidas000@gmail.com',
-  'tyago.fenix@gmail.com'
+  'compras@empresa.com'
 ];
+
+// Opções de unidade
+const UNIT_OPTIONS = ['FD', 'CX', 'PCT', 'UN'];
 
 function OrderSummaryModal({
   products,
@@ -38,22 +40,30 @@ function OrderSummaryModal({
 }: OrderSummaryModalProps) {
   const [store, setStore] = useState('');
   const [reporterName, setReporterName] = useState('');
-  const [recipientEmail, setRecipientEmail] = useState('rt.comercio2026@gmail.com'); // Valor padrão alterado
+  const [recipientEmail, setRecipientEmail] = useState('rt.comercio2026@gmail.com');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showStoreSuggestions, setShowStoreSuggestions] = useState(false);
   const [showEmailSuggestions, setShowEmailSuggestions] = useState(false);
 
-  // Filtrar sugestões de lojas
-  const filteredStores = STORE_OPTIONS.filter(s => 
-    s.toLowerCase().includes(store.toLowerCase())
-  );
+  // 🔧 CARREGAR UNIDADES SELECIONADAS DO LOCALSTORAGE
+  const getSelectedUnits = (): Record<string, string> => {
+    try {
+      const stored = localStorage.getItem('estoq_units');
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  };
 
-  // Filtrar sugestões de e-mail
-  const filteredEmails = EMAIL_SUGGESTIONS.filter(e => 
-    e.toLowerCase().includes(recipientEmail.toLowerCase())
-  );
+  // 🔧 OBTER UNIDADE SELECIONADA PARA UM PRODUTO
+  const getUnitForProduct = (product: Product): string => {
+    const units = getSelectedUnits();
+    if (units[product.id]) return units[product.id];
+    if (UNIT_OPTIONS.includes(product.unit)) return product.unit;
+    return UNIT_OPTIONS[0]; // FD
+  };
 
   // Filtrar produtos com falta
   const filteredProducts = products.filter(p => {
@@ -61,18 +71,19 @@ function OrderSummaryModal({
     return counted < p.minStock && p.active !== false;
   });
 
-  // Gerar itens do pedido
+  // 🔧 GERAR ITENS DO PEDIDO USANDO A UNIDADE SELECIONADA
   const orderItems: OrderItem[] = filteredProducts.map(p => {
     const counted = counts[p.id] || 0;
     const needed = p.minStock;
     const purchaseQty = needed - counted;
+    const unit = getUnitForProduct(p); // ← USA A UNIDADE SELECIONADA
     return {
       productId: p.id,
       productName: p.name,
       countedQty: counted,
       neededQty: needed,
       purchaseQty: purchaseQty,
-      unit: p.unit,
+      unit: unit, // ← UNIDADE SELECIONADA
       supplier: p.supplier,
       category: p.category
     };
@@ -168,7 +179,7 @@ function OrderSummaryModal({
 
             {/* Campos do formulário */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Campo Loja com autocomplete */}
+              {/* Loja */}
               <div className="relative">
                 <label className="block text-sm font-semibold text-slate-700 mb-1">
                   <Building2 className="w-4 h-4 inline mr-1" />
@@ -188,9 +199,9 @@ function OrderSummaryModal({
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm"
                     required
                   />
-                  {showStoreSuggestions && filteredStores.length > 0 && store.length > 0 && (
+                  {showStoreSuggestions && store.length > 0 && (
                     <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                      {filteredStores.map((suggestion) => (
+                      {STORE_OPTIONS.filter(s => s.toLowerCase().includes(store.toLowerCase())).map((suggestion) => (
                         <button
                           key={suggestion}
                           type="button"
@@ -207,11 +218,10 @@ function OrderSummaryModal({
                     </div>
                   )}
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  💡 Sugestões: Loja do Carmo, Loja Rua 4, Loja Matriz, etc.
-                </p>
+                <p className="text-[10px] text-slate-400 mt-1">💡 Sugestões: Loja do Carmo, Loja Rua 4</p>
               </div>
 
+              {/* Responsável */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">
                   <User className="w-4 h-4 inline mr-1" />
@@ -227,6 +237,7 @@ function OrderSummaryModal({
                 />
               </div>
 
+              {/* E-mail de envio */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">
                   <Mail className="w-4 h-4 inline mr-1" />
@@ -240,7 +251,7 @@ function OrderSummaryModal({
                 />
               </div>
 
-              {/* Campo E-mail Destinatário com autocomplete */}
+              {/* E-mail destinatário */}
               <div className="relative">
                 <label className="block text-sm font-semibold text-slate-700 mb-1">
                   <Mail className="w-4 h-4 inline mr-1" />
@@ -260,9 +271,9 @@ function OrderSummaryModal({
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm"
                     required
                   />
-                  {showEmailSuggestions && filteredEmails.length > 0 && recipientEmail.length > 0 && (
+                  {showEmailSuggestions && recipientEmail.length > 0 && (
                     <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                      {filteredEmails.map((suggestion) => (
+                      {EMAIL_SUGGESTIONS.filter(e => e.toLowerCase().includes(recipientEmail.toLowerCase())).map((suggestion) => (
                         <button
                           key={suggestion}
                           type="button"
@@ -279,13 +290,11 @@ function OrderSummaryModal({
                     </div>
                   )}
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  💡 Sugestão: rt.comercio2026@gmail.com
-                </p>
+                <p className="text-[10px] text-slate-400 mt-1">💡 Sugestão: rt.comercio2026@gmail.com</p>
               </div>
             </div>
 
-            {/* ESBOÇO DO E-MAIL - COM COLUNAS ALINHADAS */}
+            {/* ESBOÇO DO E-MAIL */}
             <div className="border border-slate-200 rounded-xl overflow-hidden">
               <div className="bg-slate-100 px-4 py-2 border-b border-slate-200">
                 <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
@@ -295,7 +304,6 @@ function OrderSummaryModal({
               </div>
               
               <div className="p-4 bg-white font-mono text-xs overflow-x-auto">
-                {/* Cabeçalho do e-mail */}
                 <div className="mb-3 space-y-0.5">
                   <p className="font-bold text-sm">PEDIDO DE REPOSIÇÃO DE ESTOQUE</p>
                   <p className="text-slate-600">Loja: {store || 'Não informada'}</p>
@@ -306,10 +314,8 @@ function OrderSummaryModal({
                 </div>
 
                 <div className="border-t border-slate-200 my-3"></div>
-
                 <p className="font-semibold text-slate-700 mb-2">PRODUTOS EM FALTA:</p>
 
-                {/* Tabela por fornecedor - COM COLUNAS ALINHADAS */}
                 {Object.entries(groupedBySupplier).map(([supplier, items]) => (
                   <div key={supplier} className="mb-4">
                     <p className="font-bold text-indigo-700 mb-1.5">FORNECEDOR: {supplier}</p>
@@ -331,7 +337,7 @@ function OrderSummaryModal({
                               <td className="text-center px-3 py-1.5 text-slate-600">{item.countedQty}</td>
                               <td className="text-center px-3 py-1.5 text-slate-600">{item.neededQty}</td>
                               <td className="text-center px-3 py-1.5 text-amber-600 font-bold">{item.purchaseQty}</td>
-                              <td className="text-center px-3 py-1.5 text-slate-500">{item.unit || 'un'}</td>
+                              <td className="text-center px-3 py-1.5 text-slate-500">{item.unit}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -345,7 +351,6 @@ function OrderSummaryModal({
                 )}
 
                 <div className="border-t border-slate-200 my-3"></div>
-
                 <div className="text-slate-500 text-[10px] space-y-0.5">
                   <p>📎 Planilha anexa com todos os detalhes.</p>
                   <p>✅ Solicitação gerada automaticamente pelo sistema C4 Gestão.</p>

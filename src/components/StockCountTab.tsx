@@ -13,7 +13,7 @@ interface StockCountTabProps {
   onToggleShowInactive: (show: boolean) => void;
 }
 
-// Opções de unidade
+// Opções de unidade disponíveis
 const UNIT_OPTIONS = ['FD', 'CX', 'PCT', 'UN'];
 
 export default function StockCountTab({
@@ -31,9 +31,8 @@ export default function StockCountTab({
   const [filterSupplier, setFilterSupplier] = useState('');
   const [onlyLowStock, setOnlyLowStock] = useState(false);
 
-  // Unidades selecionadas por produto
+  // Carregar unidades selecionadas do localStorage
   const [selectedUnits, setSelectedUnits] = useState<Record<string, string>>(() => {
-    // Tentar carregar do localStorage
     try {
       const stored = localStorage.getItem('estoq_units');
       return stored ? JSON.parse(stored) : {};
@@ -42,11 +41,11 @@ export default function StockCountTab({
     }
   });
 
-  // Categorias e fornecedores únicos
+  // Obter categorias e fornecedores únicos
   const categories = Array.from(new Set(products.map(p => p.category))).filter(Boolean).sort();
   const suppliers = Array.from(new Set(products.map(p => p.supplier))).filter(Boolean).sort();
 
-  // Filtragem
+  // 🔧 FUNÇÃO DE FILTRAGEM - APLICA TODOS OS FILTROS
   const getFilteredProducts = () => {
     return products.filter(p => {
       const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -57,26 +56,28 @@ export default function StockCountTab({
       const counted = counts[p.id] || 0;
       const isLowStock = counted < p.minStock;
       const matchesLowStock = onlyLowStock ? isLowStock : true;
+      
       return matchesSearch && matchesCategory && matchesSupplier && isActive && matchesLowStock;
     });
   };
 
+  // 🔧 PRODUTOS FILTRADOS (VISÍVEIS NA TELA)
   const filteredProducts = getFilteredProducts();
 
-  // Produtos em falta dentro do filtro
+  // 🔧 PRODUTOS EM FALTA DENTRO DOS FILTRADOS (ENVIADOS NO PEDIDO)
   const lowStockProducts = filteredProducts.filter(p => {
     const counted = counts[p.id] || 0;
     return counted < p.minStock && p.active !== false;
   });
 
-  // Obter unidade padrão para um produto
-  const getDefaultUnit = (product: Product) => {
+  // 🔧 OBTER UNIDADE SELECIONADA PARA UM PRODUTO
+  const getUnitForProduct = (product: Product): string => {
     if (selectedUnits[product.id]) return selectedUnits[product.id];
     if (UNIT_OPTIONS.includes(product.unit)) return product.unit;
     return UNIT_OPTIONS[0]; // FD
   };
 
-  // Atualizar unidade selecionada
+  // 🔧 ATUALIZAR UNIDADE SELECIONADA
   const handleUnitChange = (productId: string, unit: string) => {
     setSelectedUnits(prev => {
       const newUnits = { ...prev, [productId]: unit };
@@ -88,21 +89,22 @@ export default function StockCountTab({
     onUpdateCount(productId, currentCount, unit);
   };
 
-  // Atualizar quantidade (passa a unidade atual)
+  // 🔧 ATUALIZAR QUANTIDADE (PASSA A UNIDADE ATUAL)
   const handleUpdateCount = (productId: string, quantity: number) => {
     const product = products.find(p => p.id === productId);
     if (!product) return;
-    const unit = getDefaultUnit(product);
+    const unit = getUnitForProduct(product);
     onUpdateCount(productId, quantity, unit);
   };
 
+  // 🔧 ENVIAR APENAS OS PRODUTOS FILTRADOS E EM FALTA
   const handleGenerateOrder = () => {
     onGenerateOrder(lowStockProducts);
   };
 
   return (
     <div className="space-y-4">
-      {/* Cabeçalho com filtros e botões */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-bold text-slate-800">Registrar Falta</h2>
@@ -205,7 +207,7 @@ export default function StockCountTab({
                 const counted = counts[product.id] || 0;
                 const isLowStock = counted < product.minStock;
                 const isInactive = product.active === false;
-                const currentUnit = getDefaultUnit(product);
+                const currentUnit = getUnitForProduct(product);
 
                 return (
                   <tr 
