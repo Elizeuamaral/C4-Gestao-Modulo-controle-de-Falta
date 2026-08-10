@@ -5,7 +5,7 @@ import { Product } from '../types';
 interface StockCountTabProps {
   products: Product[];
   counts: Record<string, number>;
-  onUpdateCount: (productId: string, quantity: number, unit: string) => void; // Adicionado unit
+  onUpdateCount: (productId: string, quantity: number, unit: string) => void;
   onResetCounts: () => void;
   onToggleActiveProduct: (id: string) => void;
   onGenerateOrder: (filteredProducts: Product[]) => void;
@@ -13,7 +13,7 @@ interface StockCountTabProps {
   onToggleShowInactive: (show: boolean) => void;
 }
 
-// Opções de unidade disponíveis
+// Opções de unidade
 const UNIT_OPTIONS = ['FD', 'CX', 'PCT', 'UN'];
 
 export default function StockCountTab({
@@ -31,14 +31,22 @@ export default function StockCountTab({
   const [filterSupplier, setFilterSupplier] = useState('');
   const [onlyLowStock, setOnlyLowStock] = useState(false);
 
-  // Estado para armazenar a unidade selecionada por produto
-  const [selectedUnits, setSelectedUnits] = useState<Record<string, string>>({});
+  // Unidades selecionadas por produto
+  const [selectedUnits, setSelectedUnits] = useState<Record<string, string>>(() => {
+    // Tentar carregar do localStorage
+    try {
+      const stored = localStorage.getItem('estoq_units');
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
 
-  // Obter categorias e fornecedores únicos
+  // Categorias e fornecedores únicos
   const categories = Array.from(new Set(products.map(p => p.category))).filter(Boolean).sort();
   const suppliers = Array.from(new Set(products.map(p => p.supplier))).filter(Boolean).sort();
 
-  // 🔧 FUNÇÃO DE FILTRAGEM
+  // Filtragem
   const getFilteredProducts = () => {
     return products.filter(p => {
       const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -49,43 +57,42 @@ export default function StockCountTab({
       const counted = counts[p.id] || 0;
       const isLowStock = counted < p.minStock;
       const matchesLowStock = onlyLowStock ? isLowStock : true;
-      
       return matchesSearch && matchesCategory && matchesSupplier && isActive && matchesLowStock;
     });
   };
 
-  // Produtos filtrados
   const filteredProducts = getFilteredProducts();
 
-  // Produtos em falta dentro dos filtrados
+  // Produtos em falta dentro do filtro
   const lowStockProducts = filteredProducts.filter(p => {
     const counted = counts[p.id] || 0;
     return counted < p.minStock && p.active !== false;
   });
 
-  // Inicializar unidade padrão com a unidade do produto ou a primeira opção
+  // Obter unidade padrão para um produto
   const getDefaultUnit = (product: Product) => {
-    if (selectedUnits[product.id]) {
-      return selectedUnits[product.id];
-    }
-    // Se a unidade do produto estiver nas opções, usa ela, senão usa a primeira
-    if (UNIT_OPTIONS.includes(product.unit)) {
-      return product.unit;
-    }
-    return UNIT_OPTIONS[0]; // 'FD'
+    if (selectedUnits[product.id]) return selectedUnits[product.id];
+    if (UNIT_OPTIONS.includes(product.unit)) return product.unit;
+    return UNIT_OPTIONS[0]; // FD
   };
 
   // Atualizar unidade selecionada
   const handleUnitChange = (productId: string, unit: string) => {
-    setSelectedUnits(prev => ({
-      ...prev,
-      [productId]: unit
-    }));
+    setSelectedUnits(prev => {
+      const newUnits = { ...prev, [productId]: unit };
+      localStorage.setItem('estoq_units', JSON.stringify(newUnits));
+      return newUnits;
+    });
+    // Atualizar contagem com a nova unidade (mantém quantidade)
+    const currentCount = counts[productId] || 0;
+    onUpdateCount(productId, currentCount, unit);
   };
 
-  // Atualizar quantidade (agora com unidade)
+  // Atualizar quantidade (passa a unidade atual)
   const handleUpdateCount = (productId: string, quantity: number) => {
-    const unit = selectedUnits[productId] || UNIT_OPTIONS[0];
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+    const unit = getDefaultUnit(product);
     onUpdateCount(productId, quantity, unit);
   };
 
@@ -95,7 +102,7 @@ export default function StockCountTab({
 
   return (
     <div className="space-y-4">
-      {/* Header */}
+      {/* Cabeçalho com filtros e botões */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-bold text-slate-800">Registrar Falta</h2>
@@ -179,127 +186,143 @@ export default function StockCountTab({
         </button>
       </div>
 
-      {/* Lista de produtos */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {filteredProducts.map((product) => {
-          const counted = counts[product.id] || 0;
-          const isLowStock = counted < product.minStock;
-          const isInactive = product.active === false;
-          const currentUnit = getDefaultUnit(product);
+      {/* TABELA DE PRODUTOS - LISTA */}
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-600 uppercase">Produto</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-600 uppercase">Fornecedor</th>
+                <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-600 uppercase">Mínimo</th>
+                <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-600 uppercase">Quantidade</th>
+                <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-600 uppercase">Unidade</th>
+                <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-600 uppercase">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredProducts.map((product) => {
+                const counted = counts[product.id] || 0;
+                const isLowStock = counted < product.minStock;
+                const isInactive = product.active === false;
+                const currentUnit = getDefaultUnit(product);
 
-          return (
-            <div
-              key={product.id}
-              className={`border rounded-xl p-3 transition-all ${
-                isLowStock ? 'border-amber-300 bg-amber-50/50' : 'border-slate-200 bg-white'
-              } ${isInactive ? 'opacity-60 bg-slate-100' : ''}`}
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <h3 className={`font-medium text-sm truncate ${isInactive ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
-                    {product.name}
-                  </h3>
-                  <p className="text-xs text-slate-500">{product.supplier}</p>
-                  <p className="text-xs text-slate-400">Mínimo: {product.minStock} {product.unit}</p>
-                </div>
-                <button
-                  onClick={() => onToggleActiveProduct(product.id)}
-                  className={`text-xs px-2 py-0.5 rounded-full ${
-                    isInactive ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
-                  }`}
-                >
-                  {isInactive ? 'Inativo' : 'Ativo'}
-                </button>
-              </div>
+                return (
+                  <tr 
+                    key={product.id} 
+                    className={`hover:bg-slate-50 transition-colors ${
+                      isLowStock && !isInactive ? 'bg-amber-50/50' : ''
+                    } ${isInactive ? 'opacity-60 bg-slate-50' : ''}`}
+                  >
+                    {/* Produto */}
+                    <td className="px-4 py-2.5">
+                      <span className={`font-medium ${isInactive ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+                        {product.name}
+                      </span>
+                    </td>
 
-              {/* Campo de quantidade com seletor de unidade */}
-              <div className="mt-2 flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    if (!isInactive) {
-                      handleUpdateCount(product.id, Math.max(0, counted - 1));
-                    }
-                  }}
-                  disabled={isInactive}
-                  className={`p-1 rounded-lg transition-colors ${
-                    isInactive 
-                      ? 'bg-slate-100 text-slate-300 cursor-not-allowed' 
-                      : 'hover:bg-slate-100 text-slate-500'
-                  }`}
-                >
-                  <Minus className="w-4 h-4" />
-                </button>
-                
-                <div className="flex-1 text-center">
-                  <span className={`text-lg font-bold ${isLowStock && !isInactive ? 'text-amber-600' : isInactive ? 'text-slate-400' : 'text-slate-700'}`}>
-                    {counted}
-                  </span>
-                </div>
-                
-                <button
-                  onClick={() => {
-                    if (!isInactive) {
-                      handleUpdateCount(product.id, counted + 1);
-                    }
-                  }}
-                  disabled={isInactive}
-                  className={`p-1 rounded-lg transition-colors ${
-                    isInactive 
-                      ? 'bg-slate-100 text-slate-300 cursor-not-allowed' 
-                      : 'hover:bg-slate-100 text-slate-500'
-                  }`}
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
+                    {/* Fornecedor */}
+                    <td className="px-4 py-2.5 text-slate-600 text-xs">
+                      {product.supplier}
+                    </td>
 
-              {/* Seletor de unidade - COMBOBOX */}
-              <div className="mt-2 flex items-center gap-2">
-                <select
-                  value={currentUnit}
-                  onChange={(e) => {
-                    if (!isInactive) {
-                      handleUnitChange(product.id, e.target.value);
-                      // Atualizar a contagem com a nova unidade (mantém a quantidade)
-                      const currentCount = counts[product.id] || 0;
-                      onUpdateCount(product.id, currentCount, e.target.value);
-                    }
-                  }}
-                  disabled={isInactive}
-                  className={`w-full px-2 py-1 text-xs border rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white ${
-                    isInactive 
-                      ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200' 
-                      : 'border-slate-200 text-slate-700'
-                  }`}
-                >
-                  {UNIT_OPTIONS.map(unit => (
-                    <option key={unit} value={unit}>{unit}</option>
-                  ))}
-                </select>
-              </div>
+                    {/* Mínimo */}
+                    <td className="px-4 py-2.5 text-center text-slate-600 text-xs">
+                      {product.minStock}
+                    </td>
 
-              {isLowStock && !isInactive && (
-                <div className="mt-1 text-xs text-amber-600 flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3" />
-                  Falta {product.minStock - counted} {currentUnit}
-                </div>
-              )}
-              
-              {isInactive && (
-                <div className="mt-1 text-xs text-slate-400 flex items-center gap-1">
-                  🔒 Produto inativo - contagem bloqueada
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                    {/* Quantidade (com botões - e +) */}
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => {
+                            if (!isInactive) {
+                              handleUpdateCount(product.id, Math.max(0, counted - 1));
+                            }
+                          }}
+                          disabled={isInactive}
+                          className={`p-1 rounded-lg transition-colors ${
+                            isInactive 
+                              ? 'bg-slate-100 text-slate-300 cursor-not-allowed' 
+                              : 'hover:bg-slate-100 text-slate-500'
+                          }`}
+                        >
+                          <Minus className="w-4 h-4" />
+                        </button>
+                        <span className={`w-12 text-center font-bold text-base ${
+                          isLowStock && !isInactive ? 'text-amber-600' : isInactive ? 'text-slate-400' : 'text-slate-700'
+                        }`}>
+                          {counted}
+                        </span>
+                        <button
+                          onClick={() => {
+                            if (!isInactive) {
+                              handleUpdateCount(product.id, counted + 1);
+                            }
+                          }}
+                          disabled={isInactive}
+                          className={`p-1 rounded-lg transition-colors ${
+                            isInactive 
+                              ? 'bg-slate-100 text-slate-300 cursor-not-allowed' 
+                              : 'hover:bg-slate-100 text-slate-500'
+                          }`}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
 
-      {filteredProducts.length === 0 && (
-        <div className="text-center py-8 text-slate-500">
-          Nenhum produto encontrado com os filtros atuais.
+                    {/* Unidade - SELECT */}
+                    <td className="px-4 py-2.5 text-center">
+                      <select
+                        value={currentUnit}
+                        onChange={(e) => {
+                          if (!isInactive) {
+                            handleUnitChange(product.id, e.target.value);
+                          }
+                        }}
+                        disabled={isInactive}
+                        className={`px-2 py-1 text-xs border rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white ${
+                          isInactive 
+                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200' 
+                            : 'border-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {UNIT_OPTIONS.map(unit => (
+                          <option key={unit} value={unit}>{unit}</option>
+                        ))}
+                      </select>
+                    </td>
+
+                    {/* Status */}
+                    <td className="px-4 py-2.5 text-center">
+                      {isInactive ? (
+                        <span className="inline-block px-2 py-0.5 text-[10px] font-semibold bg-red-100 text-red-600 rounded-full">
+                          Inativo
+                        </span>
+                      ) : isLowStock ? (
+                        <span className="inline-block px-2 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded-full flex items-center gap-1 justify-center">
+                          <AlertTriangle className="w-3 h-3" />
+                          Em falta
+                        </span>
+                      ) : (
+                        <span className="inline-block px-2 py-0.5 text-[10px] font-semibold bg-green-100 text-green-700 rounded-full">
+                          OK
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-      )}
+        {filteredProducts.length === 0 && (
+          <div className="py-8 text-center text-slate-500 text-sm">
+            Nenhum produto encontrado com os filtros atuais.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
