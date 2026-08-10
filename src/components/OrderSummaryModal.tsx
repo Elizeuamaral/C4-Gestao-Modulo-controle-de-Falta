@@ -4,7 +4,7 @@ import { Product, OrderItem } from '../types';
 import { emailService } from '../services/emailService';
 
 interface OrderSummaryModalProps {
-  products: Product[];
+  products: Product[]; // ← JÁ FILTRADOS PELO StockCountTab
   totalProductsCount: number;
   counts: Record<string, number>;
   senderEmail: string;
@@ -13,24 +13,12 @@ interface OrderSummaryModalProps {
   defaultEmail: string;
 }
 
-// Lista de lojas
-const STORE_OPTIONS = [
-  'Loja do Carmo',
-  'Loja Rua 4'
-];
-
-// E-mails sugeridos
-const EMAIL_SUGGESTIONS = [
-  'rt.comercio2026@gmail.com',
-  'sosbebidas000@gmail.com',
-  'compras@empresa.com'
-];
-
-// Opções de unidade
+const STORE_OPTIONS = ['Loja do Carmo', 'Loja Rua 4'];
+const EMAIL_SUGGESTIONS = ['rt.comercio2026@gmail.com', 'sosbebidas000@gmail.com', 'compras@empresa.com'];
 const UNIT_OPTIONS = ['FD', 'CX', 'PCT', 'UN'];
 
 function OrderSummaryModal({
-  products,
+  products, // ← Produtos já filtrados
   totalProductsCount,
   counts,
   senderEmail,
@@ -47,7 +35,7 @@ function OrderSummaryModal({
   const [showStoreSuggestions, setShowStoreSuggestions] = useState(false);
   const [showEmailSuggestions, setShowEmailSuggestions] = useState(false);
 
-  // 🔧 CARREGAR UNIDADES SELECIONADAS DO LOCALSTORAGE
+  // Carregar unidades selecionadas
   const getSelectedUnits = (): Record<string, string> => {
     try {
       const stored = localStorage.getItem('estoq_units');
@@ -57,33 +45,28 @@ function OrderSummaryModal({
     }
   };
 
-  // 🔧 OBTER UNIDADE SELECIONADA PARA UM PRODUTO
+  // Obter unidade selecionada para um produto
   const getUnitForProduct = (product: Product): string => {
     const units = getSelectedUnits();
     if (units[product.id]) return units[product.id];
     if (UNIT_OPTIONS.includes(product.unit)) return product.unit;
-    return UNIT_OPTIONS[0]; // FD
+    return UNIT_OPTIONS[0];
   };
 
-  // Filtrar produtos com falta
-  const filteredProducts = products.filter(p => {
-    const counted = counts[p.id] || 0;
-    return counted < p.minStock && p.active !== false;
-  });
-
-  // 🔧 GERAR ITENS DO PEDIDO USANDO A UNIDADE SELECIONADA
-  const orderItems: OrderItem[] = filteredProducts.map(p => {
+  // 🔧 GERAR ITENS DO PEDIDO USANDO OS PRODUTOS RECEBIDOS (JÁ FILTRADOS)
+  // Inclui TODOS os produtos, independente de estar em falta ou não
+  const orderItems: OrderItem[] = products.map(p => {
     const counted = counts[p.id] || 0;
     const needed = p.minStock;
-    const purchaseQty = needed - counted;
-    const unit = getUnitForProduct(p); // ← USA A UNIDADE SELECIONADA
+    const purchaseQty = needed - counted > 0 ? needed - counted : 0;
+    const unit = getUnitForProduct(p);
     return {
       productId: p.id,
       productName: p.name,
       countedQty: counted,
       neededQty: needed,
       purchaseQty: purchaseQty,
-      unit: unit, // ← UNIDADE SELECIONADA
+      unit: unit,
       supplier: p.supplier,
       category: p.category
     };
@@ -98,7 +81,6 @@ function OrderSummaryModal({
     return acc;
   }, {} as Record<string, OrderItem[]>);
 
-  // Enviar pedido
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -115,7 +97,7 @@ function OrderSummaryModal({
       return;
     }
     if (orderItems.length === 0) {
-      setError('Nenhum produto com falta para enviar.');
+      setError('Nenhum produto para enviar.');
       return;
     }
 
@@ -158,7 +140,7 @@ function OrderSummaryModal({
               Fechar Contagem & Gerar Pedido
             </h2>
             <p className="text-xs text-slate-500">
-              Produtos na Tela: {totalProductsCount} item(ns) | Em falta: {orderItems.length} item(ns)
+              Produtos na Tela: {totalProductsCount} item(ns) | Itens no pedido: {orderItems.length} item(ns)
             </p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
@@ -169,7 +151,6 @@ function OrderSummaryModal({
         {/* Body */}
         <div className="p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Mensagem de sucesso */}
             {successMessage && (
               <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-sm">
                 <Check className="w-4 h-4 shrink-0" />
@@ -177,9 +158,7 @@ function OrderSummaryModal({
               </div>
             )}
 
-            {/* Campos do formulário */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Loja */}
               <div className="relative">
                 <label className="block text-sm font-semibold text-slate-700 mb-1">
                   <Building2 className="w-4 h-4 inline mr-1" />
@@ -221,7 +200,6 @@ function OrderSummaryModal({
                 <p className="text-[10px] text-slate-400 mt-1">💡 Sugestões: Loja do Carmo, Loja Rua 4</p>
               </div>
 
-              {/* Responsável */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">
                   <User className="w-4 h-4 inline mr-1" />
@@ -237,7 +215,6 @@ function OrderSummaryModal({
                 />
               </div>
 
-              {/* E-mail de envio */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">
                   <Mail className="w-4 h-4 inline mr-1" />
@@ -251,7 +228,6 @@ function OrderSummaryModal({
                 />
               </div>
 
-              {/* E-mail destinatário */}
               <div className="relative">
                 <label className="block text-sm font-semibold text-slate-700 mb-1">
                   <Mail className="w-4 h-4 inline mr-1" />
@@ -314,7 +290,7 @@ function OrderSummaryModal({
                 </div>
 
                 <div className="border-t border-slate-200 my-3"></div>
-                <p className="font-semibold text-slate-700 mb-2">PRODUTOS EM FALTA:</p>
+                <p className="font-semibold text-slate-700 mb-2">PRODUTOS:</p>
 
                 {Object.entries(groupedBySupplier).map(([supplier, items]) => (
                   <div key={supplier} className="mb-4">
@@ -347,7 +323,7 @@ function OrderSummaryModal({
                 ))}
 
                 {Object.keys(groupedBySupplier).length === 0 && (
-                  <p className="text-slate-400 text-center py-4">Nenhum produto em falta</p>
+                  <p className="text-slate-400 text-center py-4">Nenhum produto listado</p>
                 )}
 
                 <div className="border-t border-slate-200 my-3"></div>
@@ -358,7 +334,6 @@ function OrderSummaryModal({
               </div>
             </div>
 
-            {/* Erro */}
             {error && (
               <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-sm">
                 <AlertCircle className="w-4 h-4 shrink-0" />
@@ -366,7 +341,6 @@ function OrderSummaryModal({
               </div>
             )}
 
-            {/* Botão Enviar */}
             <button
               type="submit"
               disabled={isSubmitting || orderItems.length === 0}

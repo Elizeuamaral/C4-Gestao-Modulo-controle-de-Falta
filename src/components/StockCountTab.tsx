@@ -64,42 +64,36 @@ export default function StockCountTab({
   // 🔧 PRODUTOS FILTRADOS (VISÍVEIS NA TELA)
   const filteredProducts = getFilteredProducts();
 
-  // 🔧 PRODUTOS EM FALTA DENTRO DOS FILTRADOS (ENVIADOS NO PEDIDO)
-  const lowStockProducts = filteredProducts.filter(p => {
-    const counted = counts[p.id] || 0;
-    return counted < p.minStock && p.active !== false;
-  });
+  // 🔧 ENVIAR TODOS OS PRODUTOS FILTRADOS (NÃO APENAS EM FALTA)
+  const handleGenerateOrder = () => {
+    // Agora envia TODOS os produtos filtrados, independente de estar em falta ou não
+    onGenerateOrder(filteredProducts);
+  };
 
-  // 🔧 OBTER UNIDADE SELECIONADA PARA UM PRODUTO
+  // Obter unidade selecionada para um produto
   const getUnitForProduct = (product: Product): string => {
     if (selectedUnits[product.id]) return selectedUnits[product.id];
     if (UNIT_OPTIONS.includes(product.unit)) return product.unit;
     return UNIT_OPTIONS[0]; // FD
   };
 
-  // 🔧 ATUALIZAR UNIDADE SELECIONADA
+  // Atualizar unidade selecionada
   const handleUnitChange = (productId: string, unit: string) => {
     setSelectedUnits(prev => {
       const newUnits = { ...prev, [productId]: unit };
       localStorage.setItem('estoq_units', JSON.stringify(newUnits));
       return newUnits;
     });
-    // Atualizar contagem com a nova unidade (mantém quantidade)
     const currentCount = counts[productId] || 0;
     onUpdateCount(productId, currentCount, unit);
   };
 
-  // 🔧 ATUALIZAR QUANTIDADE (PASSA A UNIDADE ATUAL)
+  // Atualizar quantidade
   const handleUpdateCount = (productId: string, quantity: number) => {
     const product = products.find(p => p.id === productId);
     if (!product) return;
     const unit = getUnitForProduct(product);
     onUpdateCount(productId, quantity, unit);
-  };
-
-  // 🔧 ENVIAR APENAS OS PRODUTOS FILTRADOS E EM FALTA
-  const handleGenerateOrder = () => {
-    onGenerateOrder(lowStockProducts);
   };
 
   return (
@@ -111,12 +105,6 @@ export default function StockCountTab({
           <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
             {filteredProducts.length} produtos
           </span>
-          {lowStockProducts.length > 0 && (
-            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full flex items-center gap-1">
-              <AlertTriangle className="w-3 h-3" />
-              {lowStockProducts.length} em falta
-            </span>
-          )}
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -135,7 +123,7 @@ export default function StockCountTab({
           </button>
           <button
             onClick={handleGenerateOrder}
-            disabled={lowStockProducts.length === 0}
+            disabled={filteredProducts.length === 0}
             className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-400 text-white text-xs font-semibold rounded-xl transition-colors"
           >
             <Send className="w-3.5 h-3.5" />
@@ -216,24 +204,17 @@ export default function StockCountTab({
                       isLowStock && !isInactive ? 'bg-amber-50/50' : ''
                     } ${isInactive ? 'opacity-60 bg-slate-50' : ''}`}
                   >
-                    {/* Produto */}
                     <td className="px-4 py-2.5">
                       <span className={`font-medium ${isInactive ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
                         {product.name}
                       </span>
                     </td>
-
-                    {/* Fornecedor */}
                     <td className="px-4 py-2.5 text-slate-600 text-xs">
                       {product.supplier}
                     </td>
-
-                    {/* Mínimo */}
                     <td className="px-4 py-2.5 text-center text-slate-600 text-xs">
                       {product.minStock}
                     </td>
-
-                    {/* Quantidade (com botões - e +) */}
                     <td className="px-4 py-2.5">
                       <div className="flex items-center justify-center gap-2">
                         <button
@@ -273,8 +254,6 @@ export default function StockCountTab({
                         </button>
                       </div>
                     </td>
-
-                    {/* Unidade - SELECT */}
                     <td className="px-4 py-2.5 text-center">
                       <select
                         value={currentUnit}
@@ -295,8 +274,6 @@ export default function StockCountTab({
                         ))}
                       </select>
                     </td>
-
-                    {/* Status */}
                     <td className="px-4 py-2.5 text-center">
                       {isInactive ? (
                         <span className="inline-block px-2 py-0.5 text-[10px] font-semibold bg-red-100 text-red-600 rounded-full">
