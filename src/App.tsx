@@ -231,13 +231,22 @@ export default function App() {
     triggerBanner(show ? 'Exibindo produtos inativos na contagem.' : 'Produtos inativos ocultados da contagem.', 'info');
   };
 
-  // Stock Counting Actions
-  const handleUpdateCount = (productId: string, quantity: number) => {
+  // 🔧 Stock Counting Actions - ATUALIZADO COM UNIT
+  const handleUpdateCount = (productId: string, quantity: number, unit: string) => {
     const updatedCounts = {
       ...counts,
       [productId]: quantity
     };
     saveCounts(updatedCounts);
+    
+    // Armazenar a unidade selecionada no localStorage
+    try {
+      const unitMap = JSON.parse(localStorage.getItem('estoq_units') || '{}');
+      unitMap[productId] = unit;
+      localStorage.setItem('estoq_units', JSON.stringify(unitMap));
+    } catch (e) {
+      // Ignora erro
+    }
   };
 
   const handleResetCounts = () => {

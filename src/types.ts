@@ -3,23 +3,18 @@ export interface Product {
   name: string;
   category: string;
   supplier: string;
-  minStock: number; // Quantidade necessária em estoque
-  unit: string;     // Unidade de medida (ex: un, kg, l)
-  active?: boolean; // Status de ativo/inativo
-}
-
-export interface StockCount {
-  productId: string;
-  countedQty: number;
+  minStock: number;
+  unit: string;
+  active: boolean;
 }
 
 export interface OrderItem {
   productId: string;
   productName: string;
   countedQty: number;
-  neededQty: number; // minStock
-  purchaseQty: number; // neededQty - countedQty
-  unit: string;
+  neededQty: number;
+  purchaseQty: number;
+  unit: string; // ← Unidade selecionada pelo usuário
   supplier: string;
   category: string;
 }
@@ -28,8 +23,8 @@ export interface Order {
   id: string;
   createdAt: string;
   recipientEmail: string;
-  reporterName: string; // Quem fez a contagem / falta
-  store: string;        // Loja selecionada
+  reporterName: string;
+  store: string;
   items: OrderItem[];
   status: 'pending' | 'replenished';
 }

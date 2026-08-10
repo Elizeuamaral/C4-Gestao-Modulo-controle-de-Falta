@@ -5,13 +5,16 @@ import { Product } from '../types';
 interface StockCountTabProps {
   products: Product[];
   counts: Record<string, number>;
-  onUpdateCount: (productId: string, quantity: number) => void;
+  onUpdateCount: (productId: string, quantity: number, unit: string) => void; // Adicionado unit
   onResetCounts: () => void;
   onToggleActiveProduct: (id: string) => void;
   onGenerateOrder: (filteredProducts: Product[]) => void;
   showInactive: boolean;
   onToggleShowInactive: (show: boolean) => void;
 }
+
+// Opções de unidade disponíveis
+const UNIT_OPTIONS = ['FD', 'CX', 'PCT', 'UN'];
 
 export default function StockCountTab({
   products,
@@ -28,29 +31,63 @@ export default function StockCountTab({
   const [filterSupplier, setFilterSupplier] = useState('');
   const [onlyLowStock, setOnlyLowStock] = useState(false);
 
+  // Estado para armazenar a unidade selecionada por produto
+  const [selectedUnits, setSelectedUnits] = useState<Record<string, string>>({});
+
   // Obter categorias e fornecedores únicos
   const categories = Array.from(new Set(products.map(p => p.category))).filter(Boolean).sort();
   const suppliers = Array.from(new Set(products.map(p => p.supplier))).filter(Boolean).sort();
 
-  // Filtrar produtos
-  const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         p.supplier.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = filterCategory ? p.category === filterCategory : true;
-    const matchesSupplier = filterSupplier ? p.supplier === filterSupplier : true;
-    const isActive = showInactive ? true : p.active !== false;
-    const counted = counts[p.id] || 0;
-    const isLowStock = counted < p.minStock;
-    const matchesLowStock = onlyLowStock ? isLowStock : true;
-    
-    return matchesSearch && matchesCategory && matchesSupplier && isActive && matchesLowStock;
-  });
+  // 🔧 FUNÇÃO DE FILTRAGEM
+  const getFilteredProducts = () => {
+    return products.filter(p => {
+      const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           p.supplier.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = filterCategory ? p.category === filterCategory : true;
+      const matchesSupplier = filterSupplier ? p.supplier === filterSupplier : true;
+      const isActive = showInactive ? true : p.active !== false;
+      const counted = counts[p.id] || 0;
+      const isLowStock = counted < p.minStock;
+      const matchesLowStock = onlyLowStock ? isLowStock : true;
+      
+      return matchesSearch && matchesCategory && matchesSupplier && isActive && matchesLowStock;
+    });
+  };
 
-  // Produtos com falta (counted < minStock)
+  // Produtos filtrados
+  const filteredProducts = getFilteredProducts();
+
+  // Produtos em falta dentro dos filtrados
   const lowStockProducts = filteredProducts.filter(p => {
     const counted = counts[p.id] || 0;
-    return counted < p.minStock;
+    return counted < p.minStock && p.active !== false;
   });
+
+  // Inicializar unidade padrão com a unidade do produto ou a primeira opção
+  const getDefaultUnit = (product: Product) => {
+    if (selectedUnits[product.id]) {
+      return selectedUnits[product.id];
+    }
+    // Se a unidade do produto estiver nas opções, usa ela, senão usa a primeira
+    if (UNIT_OPTIONS.includes(product.unit)) {
+      return product.unit;
+    }
+    return UNIT_OPTIONS[0]; // 'FD'
+  };
+
+  // Atualizar unidade selecionada
+  const handleUnitChange = (productId: string, unit: string) => {
+    setSelectedUnits(prev => ({
+      ...prev,
+      [productId]: unit
+    }));
+  };
+
+  // Atualizar quantidade (agora com unidade)
+  const handleUpdateCount = (productId: string, quantity: number) => {
+    const unit = selectedUnits[productId] || UNIT_OPTIONS[0];
+    onUpdateCount(productId, quantity, unit);
+  };
 
   const handleGenerateOrder = () => {
     onGenerateOrder(lowStockProducts);
@@ -148,6 +185,7 @@ export default function StockCountTab({
           const counted = counts[product.id] || 0;
           const isLowStock = counted < product.minStock;
           const isInactive = product.active === false;
+          const currentUnit = getDefaultUnit(product);
 
           return (
             <div
@@ -174,12 +212,12 @@ export default function StockCountTab({
                 </button>
               </div>
 
-              {/* 🔧 CAMPO DE QUANTIDADE - BLOQUEADO SE INATIVO */}
+              {/* Campo de quantidade com seletor de unidade */}
               <div className="mt-2 flex items-center gap-2">
                 <button
                   onClick={() => {
                     if (!isInactive) {
-                      onUpdateCount(product.id, Math.max(0, counted - 1));
+                      handleUpdateCount(product.id, Math.max(0, counted - 1));
                     }
                   }}
                   disabled={isInactive}
@@ -196,13 +234,12 @@ export default function StockCountTab({
                   <span className={`text-lg font-bold ${isLowStock && !isInactive ? 'text-amber-600' : isInactive ? 'text-slate-400' : 'text-slate-700'}`}>
                     {counted}
                   </span>
-                  <span className="text-xs text-slate-400 ml-1">{product.unit}</span>
                 </div>
                 
                 <button
                   onClick={() => {
                     if (!isInactive) {
-                      onUpdateCount(product.id, counted + 1);
+                      handleUpdateCount(product.id, counted + 1);
                     }
                   }}
                   disabled={isInactive}
@@ -216,10 +253,35 @@ export default function StockCountTab({
                 </button>
               </div>
 
+              {/* Seletor de unidade - COMBOBOX */}
+              <div className="mt-2 flex items-center gap-2">
+                <select
+                  value={currentUnit}
+                  onChange={(e) => {
+                    if (!isInactive) {
+                      handleUnitChange(product.id, e.target.value);
+                      // Atualizar a contagem com a nova unidade (mantém a quantidade)
+                      const currentCount = counts[product.id] || 0;
+                      onUpdateCount(product.id, currentCount, e.target.value);
+                    }
+                  }}
+                  disabled={isInactive}
+                  className={`w-full px-2 py-1 text-xs border rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white ${
+                    isInactive 
+                      ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200' 
+                      : 'border-slate-200 text-slate-700'
+                  }`}
+                >
+                  {UNIT_OPTIONS.map(unit => (
+                    <option key={unit} value={unit}>{unit}</option>
+                  ))}
+                </select>
+              </div>
+
               {isLowStock && !isInactive && (
                 <div className="mt-1 text-xs text-amber-600 flex items-center gap-1">
                   <AlertTriangle className="w-3 h-3" />
-                  Falta {product.minStock - counted} {product.unit}
+                  Falta {product.minStock - counted} {currentUnit}
                 </div>
               )}
               
@@ -235,7 +297,7 @@ export default function StockCountTab({
 
       {filteredProducts.length === 0 && (
         <div className="text-center py-8 text-slate-500">
-          Nenhum produto encontrado.
+          Nenhum produto encontrado com os filtros atuais.
         </div>
       )}
     </div>
