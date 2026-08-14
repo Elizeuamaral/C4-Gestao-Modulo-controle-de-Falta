@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ClipboardList, Activity, User, Sparkles, Zap, Lock, AlertCircle, Settings } from 'lucide-react';
-import { Product, OrderItem, Order } from './types';
+import { ClipboardList, Activity, User, Sparkles, Zap, Lock, AlertCircle, Settings, PackageCheck } from 'lucide-react';
+import { Product, OrderItem, Order, ConferenceEntry } from './types';
 import { INITIAL_PRODUCTS } from './mockData';
 import ProductBaseTab from './components/ProductBaseTab';
 import StockCountTab from './components/StockCountTab';
+import ConferenceTab from './components/ConferenceTab';
 import OrderSummaryModal from './components/OrderSummaryModal';
 import OrderHistoryTab from './components/OrderHistoryTab';
 import { emailService } from './services/emailService';
@@ -11,7 +12,7 @@ import InstallBanner from './components/InstallBanner';
 
 export default function App() {
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'counting' | 'database' | 'history'>('counting');
+  const [activeTab, setActiveTab] = useState<'counting' | 'conference' | 'database' | 'history'>('counting');
 
   // Password protection state for "Configurações"
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -19,11 +20,13 @@ export default function App() {
   const [passwordError, setPasswordError] = useState('');
   const [configPassword, setConfigPassword] = useState<string>('@Maral22');
   const [showInactive, setShowInactive] = useState<boolean>(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // App Core State (synchronized with localStorage)
   const [products, setProducts] = useState<Product[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [orders, setOrders] = useState<Order[]>([]);
+  const [conferenceEntries, setConferenceEntries] = useState<ConferenceEntry[]>([]);
   const [userEmail, setUserEmail] = useState<string>('rt.comercio2026@gmail.com');
   const [orderProducts, setOrderProducts] = useState<Product[] | null>(null);
 
@@ -37,6 +40,7 @@ export default function App() {
       const storedProducts = localStorage.getItem('estoq_products');
       const storedCounts = localStorage.getItem('estoq_counts');
       const storedOrders = localStorage.getItem('estoq_orders');
+      const storedConferenceEntries = localStorage.getItem('estoq_conference_entries');
       const storedUserEmail = localStorage.getItem('estoq_user_email');
       const storedConfigPassword = localStorage.getItem('estoq_config_password');
       const storedShowInactive = localStorage.getItem('estoq_show_inactive');
@@ -70,6 +74,7 @@ export default function App() {
         localStorage.setItem('estoq_counts', JSON.stringify(initialZeroCounts));
       }
       if (storedOrders) setOrders(JSON.parse(storedOrders));
+      if (storedConferenceEntries) setConferenceEntries(JSON.parse(storedConferenceEntries));
       if (storedUserEmail) setUserEmail(storedUserEmail);
       if (storedConfigPassword) setConfigPassword(storedConfigPassword);
       if (storedShowInactive) setShowInactive(storedShowInactive === 'true');
@@ -95,6 +100,11 @@ export default function App() {
   const saveOrders = (updatedOrders: Order[]) => {
     setOrders(updatedOrders);
     localStorage.setItem('estoq_orders', JSON.stringify(updatedOrders));
+  };
+
+  const saveConferenceEntries = (updatedEntries: ConferenceEntry[]) => {
+    setConferenceEntries(updatedEntries);
+    localStorage.setItem('estoq_conference_entries', JSON.stringify(updatedEntries));
   };
 
   const saveUserEmail = (email: string) => {
@@ -185,11 +195,12 @@ export default function App() {
     saveProducts([]);
     saveCounts({});
     saveOrders([]);
-    triggerBanner('Sistema resetado! A base de dados e o histórico foram completamente apagados.', 'info');
+    saveConferenceEntries([]);
+    triggerBanner('Sistema resetado! A base de dados, histórico e registros de conferência foram completamente apagados.', 'info');
   };
 
   // Tab switching with Password Protection
-  const handleTabClick = (tab: 'counting' | 'database' | 'history') => {
+  const handleTabClick = (tab: 'counting' | 'conference' | 'database' | 'history') => {
     if (tab === 'database') {
       setPasswordInput('');
       setPasswordError('');
@@ -307,6 +318,23 @@ export default function App() {
     triggerBanner('Registro de pedido excluído do histórico.', 'info');
   };
 
+  const handleAddConferenceEntry = (entry: Omit<ConferenceEntry, 'id' | 'createdAt'>) => {
+    const newEntry: ConferenceEntry = {
+      ...entry,
+      id: `CONF-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+
+    const updated = [newEntry, ...conferenceEntries];
+    saveConferenceEntries(updated);
+    triggerBanner('Conferência de chegada registrada com sucesso!', 'success');
+  };
+
+  const handleDeleteConferenceEntry = (entryId: string) => {
+    saveConferenceEntries(conferenceEntries.filter(item => item.id !== entryId));
+    triggerBanner('Registro de conferência removido.', 'info');
+  };
+
   const pendingOrdersCount = orders.filter(o => o.status === 'pending').length;
 
   return (
@@ -391,96 +419,66 @@ export default function App() {
         </div>
       )}
 
-      {/* Sticky Top Header & Navigation */}
-      <div className="sticky top-0 z-30 bg-slate-50 border-b border-slate-200/80 shadow-xs" id="fixed-top-menu-wrapper">
-        <header className="bg-[#0e1626] border-b border-slate-800 text-white shadow-md" id="app-header">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-4 py-3.5">
-
-              <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-[#00e676] text-slate-950 rounded-xl shadow-xs shrink-0" id="header-logo">
-                    <Zap className="w-5 h-5 fill-slate-950" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h1 className="font-display font-extrabold text-white tracking-tight text-base sm:text-lg" id="header-app-name">
-                        C4 Gestão
-                      </h1>
-                      <span className="bg-[#064e3b] text-[#34d399] border border-[#047857]/50 font-extrabold text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                        Módulo Controle de Falta
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400 font-normal">
-                      Registro e conferência rápida de falta de estoque
-                    </p>
-                  </div>
-                </div>
-
-                <div className="md:hidden flex items-center gap-1.5 text-xs bg-slate-800/80 border border-slate-700/80 rounded-xl px-2.5 py-1" id="header-user-mobile-panel">
-                  <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <input
-                    type="email"
-                    value={userEmail}
-                    onChange={(e) => saveUserEmail(e.target.value)}
-                    placeholder="E-mail de envio"
-                    className="font-medium text-slate-200 bg-transparent focus:outline-hidden p-0 m-0 w-32 text-[11px]"
-                    title="E-mail de envio (remetente)"
-                  />
-                </div>
+      {/* Sidebar + App Layout */}
+      <div className="flex min-h-screen">
+        <aside className={`${sidebarOpen ? 'w-72' : 'w-20'} transition-all duration-300 bg-[#f0f4f9] border-r border-slate-200/80 flex flex-col`}> 
+          <div className="flex items-center justify-between p-3 border-b border-slate-200 bg-white/80">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="flex items-center justify-center w-9 h-9 rounded-xl bg-[#544af4] text-white shadow-md hover:opacity-95"
+              aria-label="Abrir ou fechar menu"
+            >
+              <span className="text-lg font-bold">{sidebarOpen ? '‹' : '›'}</span>
+            </button>
+            {sidebarOpen && (
+              <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[#eef2ff] text-[#544af4] font-bold text-xs">
+                <Zap className="w-3.5 h-3.5" />
+                Estoque
               </div>
-
-              <div className="hidden md:flex items-center gap-3" id="header-user-panel">
-                <div className="flex items-center gap-2 text-xs bg-slate-800/80 border border-slate-700/80 rounded-xl px-3 py-1.5">
-                  <User className="w-4 h-4 text-slate-400 shrink-0" />
-                  <div className="text-left">
-                    <span className="text-[9px] text-slate-400 block font-medium uppercase leading-none">E-mail de envio</span>
-                    <input
-                      type="email"
-                      value={userEmail}
-                      onChange={(e) => saveUserEmail(e.target.value)}
-                      placeholder="Remetente Gmail"
-                      className="font-semibold text-slate-200 bg-transparent focus:outline-hidden p-0 m-0 w-44 text-xs"
-                      title="E-mail de envio (remetente)"
-                    />
-                  </div>
-                </div>
-              </div>
-
-            </div>
+            )}
           </div>
-        </header>
 
-        <div className="max-w-3xl mx-auto w-full px-4 py-2.5" id="nav-tabs-wrapper">
-          <nav className="flex bg-white border border-slate-200/80 rounded-2xl p-1.5 shadow-xs justify-between gap-1.5" id="nav-tabs">
+          <nav className="p-3 space-y-2">
+            <button
+              type="button"
+              onClick={() => handleTabClick('conference')}
+              className={`w-full flex items-center ${sidebarOpen ? 'justify-start gap-3 px-3' : 'justify-center'} rounded-xl py-2.5 text-sm font-semibold transition-all ${
+                activeTab === 'conference'
+                  ? 'bg-[#544af4] text-white shadow-md'
+                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              <PackageCheck className="w-4 h-4" />
+              {sidebarOpen && <span>Conferência</span>}
+            </button>
+
             <button
               type="button"
               onClick={() => handleTabClick('counting')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+              className={`w-full flex items-center ${sidebarOpen ? 'justify-start gap-3 px-3' : 'justify-center'} rounded-xl py-2.5 text-sm font-semibold transition-all ${
                 activeTab === 'counting'
-                  ? 'bg-[#544af4] text-white shadow-md shadow-[#544af4]/20'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  ? 'bg-[#544af4] text-white shadow-md'
+                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
               }`}
-              id="tab-btn-counting"
             >
               <ClipboardList className="w-4 h-4" />
-              <span>Registrar Falta</span>
+              {sidebarOpen && <span>Registrar Falta</span>}
             </button>
 
             <button
               type="button"
               onClick={() => handleTabClick('history')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer relative ${
+              className={`w-full flex items-center ${sidebarOpen ? 'justify-start gap-3 px-3' : 'justify-center'} rounded-xl py-2.5 text-sm font-semibold transition-all relative ${
                 activeTab === 'history'
-                  ? 'bg-[#544af4] text-white shadow-md shadow-[#544af4]/20'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  ? 'bg-[#544af4] text-white shadow-md'
+                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
               }`}
-              id="tab-btn-history"
             >
               <Activity className="w-4 h-4" />
-              <span>Histórico</span>
-              {pendingOrdersCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-amber-500 text-slate-950 text-[10px] font-extrabold px-1.5 py-0.5 rounded-full ring-2 ring-white animate-pulse" id="badge-pending-count">
+              {sidebarOpen && <span>Histórico</span>}
+              {pendingOrdersCount > 0 && sidebarOpen && (
+                <span className="ml-auto bg-amber-500 text-slate-950 text-[10px] font-extrabold px-1.5 py-0.5 rounded-full ring-2 ring-white">
                   {pendingOrdersCount}
                 </span>
               )}
@@ -489,63 +487,100 @@ export default function App() {
             <button
               type="button"
               onClick={() => handleTabClick('database')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+              className={`w-full flex items-center ${sidebarOpen ? 'justify-start gap-3 px-3' : 'justify-center'} rounded-xl py-2.5 text-sm font-semibold transition-all ${
                 activeTab === 'database'
-                  ? 'bg-[#544af4] text-white shadow-md shadow-[#544af4]/20'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  ? 'bg-[#544af4] text-white shadow-md'
+                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
               }`}
-              id="tab-btn-database"
             >
               <Settings className="w-4 h-4" />
-              <span>Configurações</span>
+              {sidebarOpen && <span>Configurações</span>}
             </button>
           </nav>
+
+          <div className="mt-auto p-3 border-t border-slate-200 bg-white/80">
+            <div className="flex items-center gap-2 text-xs bg-slate-800 text-slate-100 rounded-xl px-3 py-2">
+              <User className="w-3.5 h-3.5 text-slate-300" />
+              {sidebarOpen ? (
+                <input
+                  type="email"
+                  value={userEmail}
+                  onChange={(e) => saveUserEmail(e.target.value)}
+                  className="w-full bg-transparent text-slate-100 focus:outline-none"
+                  placeholder="E-mail de envio"
+                />
+              ) : (
+                <span className="sr-only">E-mail</span>
+              )}
+            </div>
+          </div>
+        </aside>
+
+        <div className="flex-1 flex flex-col">
+          <header className="bg-[#ffffff] border-b border-slate-200/80 shadow-sm">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-[#00d26a] text-slate-950 rounded-xl shadow-sm">
+                  <Zap className="w-5 h-5 fill-slate-950" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-slate-800">Controle de Estoque</h1>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6" id="app-main-content">
+            {activeTab === 'counting' && (
+              <StockCountTab
+                products={products}
+                counts={counts}
+                onUpdateCount={handleUpdateCount}
+                onResetCounts={handleResetCounts}
+                onToggleActiveProduct={handleToggleActiveProduct}
+                onGenerateOrder={(filteredProds) => {
+                  setOrderProducts(filteredProds);
+                  setShowOrderModal(true);
+                }}
+                showInactive={showInactive}
+                onToggleShowInactive={handleToggleShowInactive}
+              />
+            )}
+
+            {activeTab === 'conference' && (
+              <ConferenceTab
+                products={products}
+                entries={conferenceEntries}
+                onAddEntry={handleAddConferenceEntry}
+                onDeleteEntry={handleDeleteConferenceEntry}
+              />
+            )}
+
+            {activeTab === 'database' && (
+              <ProductBaseTab
+                products={products}
+                onAddProduct={handleAddProduct}
+                onImportProducts={handleImportProducts}
+                onDeleteProduct={handleDeleteProduct}
+                onToggleActiveProduct={handleToggleActiveProduct}
+                onClearAllProducts={handleClearAllProducts}
+                onResetSystem={handleResetSystem}
+                showInactive={showInactive}
+                onToggleShowInactive={handleToggleShowInactive}
+                onChangePassword={handleUpdatePassword}
+              />
+            )}
+
+            {activeTab === 'history' && (
+              <OrderHistoryTab
+                orders={orders}
+                onConfirmReplenish={handleConfirmReplenish}
+                onDeleteOrder={handleDeleteOrder}
+              />
+            )}
+          </main>
         </div>
       </div>
-
-      {/* Main Layout Container */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-3 pb-8" id="app-main-content">
-        
-        {activeTab === 'counting' && (
-          <StockCountTab
-            products={products}
-            counts={counts}
-            onUpdateCount={handleUpdateCount}
-            onResetCounts={handleResetCounts}
-            onToggleActiveProduct={handleToggleActiveProduct}
-            onGenerateOrder={(filteredProds) => {
-              setOrderProducts(filteredProds);
-              setShowOrderModal(true);
-            }}
-            showInactive={showInactive}
-            onToggleShowInactive={handleToggleShowInactive}
-          />
-        )}
-
-        {activeTab === 'database' && (
-          <ProductBaseTab
-            products={products}
-            onAddProduct={handleAddProduct}
-            onImportProducts={handleImportProducts}
-            onDeleteProduct={handleDeleteProduct}
-            onToggleActiveProduct={handleToggleActiveProduct}
-            onClearAllProducts={handleClearAllProducts}
-            onResetSystem={handleResetSystem}
-            showInactive={showInactive}
-            onToggleShowInactive={handleToggleShowInactive}
-            onChangePassword={handleUpdatePassword}
-          />
-        )}
-
-        {activeTab === 'history' && (
-          <OrderHistoryTab
-            orders={orders}
-            onConfirmReplenish={handleConfirmReplenish}
-            onDeleteOrder={handleDeleteOrder}
-          />
-        )}
-
-      </main>
 
       {/* Order Generation Modal Dialog */}
       {showOrderModal && (

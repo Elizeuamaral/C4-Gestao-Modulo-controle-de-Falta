@@ -130,7 +130,7 @@ export default function InstallBanner() {
                 Instale o aplicativo no tablet ou celular
               </h3>
               <p className="text-gray-400 text-xs sm:text-sm">
-                Use o botão abaixo para adicionar o C4 Gestão à tela inicial e acessar rapidamente offline.
+                Use o botão abaixo para adicionar o Controle de Estoque à tela inicial e acessar rapidamente offline.
               </p>
             </div>
           </div>

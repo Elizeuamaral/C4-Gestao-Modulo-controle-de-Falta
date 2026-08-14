@@ -22,9 +22,9 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
         manifest: {
-          name: 'C4 Gestão - Controle de Faltas',
-          short_name: 'C4 Faltas',
-          description: 'Sistema de controle de falta de estoque',
+          name: 'Controle de Estoque',
+          short_name: 'Controle Estoque',
+          description: 'Sistema integrado de conferência de chegada e controle de falta de estoque',
           theme_color: '#0e1626',
           background_color: '#f8fafc',
           display: 'standalone',

@@ -8,6 +8,23 @@ export interface Product {
   active: boolean;
 }
 
+export interface ConferenceEntry {
+  id: string;
+  productId: string;
+  productName: string;
+  category: string;
+  supplier: string;
+  quantity: number;
+  unit: string;
+  lot: string;
+  address: string;
+  expirationDate?: string;
+  receivedDate: string;
+  invoiceNumber?: string;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface OrderItem {
   productId: string;
   productName: string;

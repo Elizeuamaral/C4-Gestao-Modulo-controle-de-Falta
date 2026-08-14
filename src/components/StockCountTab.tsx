@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Plus, Minus, RefreshCw, Send, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { Search, Plus, Minus, RefreshCw, Send, Eye, EyeOff, Download, AlertTriangle } from 'lucide-react';
 import { Product } from '../types';
 
 interface StockCountTabProps {
@@ -64,6 +64,28 @@ export default function StockCountTab({
   // 🔧 PRODUTOS FILTRADOS (VISÍVEIS NA TELA)
   const filteredProducts = getFilteredProducts();
 
+  const exportReport = () => {
+    if (filteredProducts.length === 0) return;
+
+    const headers = ['Produto', 'Fornecedor', 'Categoria', 'Estoque mínimo', 'Quantidade registrada', 'Unidade', 'Status'];
+    const rows = filteredProducts.map(product => {
+      const counted = counts[product.id] || 0;
+      const status = counted < product.minStock ? 'Em falta' : 'OK';
+      return [product.name, product.supplier, product.category, String(product.minStock), String(counted), getUnitForProduct(product), status];
+    });
+
+    const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map(row => row.join(';'))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `relatorio_falta_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   // 🔧 ENVIAR TODOS OS PRODUTOS FILTRADOS (NÃO APENAS EM FALTA)
   const handleGenerateOrder = () => {
     // Agora envia TODOS os produtos filtrados, independente de estar em falta ou não
@@ -120,6 +142,14 @@ export default function StockCountTab({
           >
             <RefreshCw className="w-3.5 h-3.5" />
             Zerar Contagens
+          </button>
+          <button
+            onClick={exportReport}
+            disabled={filteredProducts.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white text-xs font-semibold rounded-xl transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Baixar relatório
           </button>
           <button
             onClick={handleGenerateOrder}

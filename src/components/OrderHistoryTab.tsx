@@ -1,5 +1,5 @@
 import React from 'react';
-import { Package, User, Store, Mail, Eye } from 'lucide-react';
+import { Package, Mail, Eye, Download } from 'lucide-react';
 import { Order } from '../types';
 
 interface OrderHistoryTabProps {
@@ -13,6 +13,32 @@ export default function OrderHistoryTab({
   onConfirmReplenish,
   onDeleteOrder
 }: OrderHistoryTabProps) {
+  const exportReport = () => {
+    if (orders.length === 0) return;
+
+    const headers = ['ID', 'Data de envio', 'Relator', 'Loja', 'E-mail', 'Status', 'Itens'];
+    const rows = orders.map(order => [
+      order.id,
+      new Date(order.createdAt).toLocaleString('pt-BR'),
+      order.reporterName,
+      order.store,
+      order.recipientEmail,
+      order.status === 'pending' ? 'Pendente' : 'Reposição confirmada',
+      order.items.map(item => `${item.productName}: ${item.purchaseQty} ${item.unit}`).join(' | '),
+    ]);
+
+    const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map(row => row.join(';'))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `relatorio_historico_falta_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   if (orders.length === 0) {
     return (
       <div className="text-center py-12 text-slate-500">
@@ -25,7 +51,17 @@ export default function OrderHistoryTab({
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-bold text-slate-800 mb-4">Histórico de Falta de Estoque</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-bold text-slate-800 mb-4">Histórico de Falta de Estoque</h2>
+        <button
+          type="button"
+          onClick={exportReport}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm"
+        >
+          <Download className="w-3.5 h-3.5" />
+          Baixar relatório
+        </button>
+      </div>
       
       <div className="border border-slate-200 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
