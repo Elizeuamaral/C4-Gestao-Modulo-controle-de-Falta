@@ -30,6 +30,8 @@ export default function StockCountTab({
   const [filterCategory, setFilterCategory] = useState('');
   const [filterSupplier, setFilterSupplier] = useState('');
   const [onlyLowStock, setOnlyLowStock] = useState(false);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState('');
 
   // Carregar unidades selecionadas do localStorage
   const [selectedUnits, setSelectedUnits] = useState<Record<string, string>>(() => {
@@ -86,6 +88,20 @@ export default function StockCountTab({
     });
     const currentCount = counts[productId] || 0;
     onUpdateCount(productId, currentCount, unit);
+  };
+
+  // Iniciar edição direta da quantidade
+  const handleStartEditingCount = (productId: string, currentCount: number) => {
+    setEditingProductId(productId);
+    setEditingValue(String(currentCount));
+  };
+
+  // Confirmar quantidade digitada
+  const handleCommitEditingCount = (productId: string) => {
+    const quantity = Math.max(0, Number.parseInt(editingValue, 10) || 0);
+    handleUpdateCount(productId, quantity);
+    setEditingProductId(null);
+    setEditingValue('');
   };
 
   // Atualizar quantidade
@@ -232,11 +248,48 @@ export default function StockCountTab({
                         >
                           <Minus className="w-4 h-4" />
                         </button>
-                        <span className={`w-12 text-center font-bold text-base ${
-                          isLowStock && !isInactive ? 'text-amber-600' : isInactive ? 'text-slate-400' : 'text-slate-700'
-                        }`}>
-                          {counted}
-                        </span>
+                        {editingProductId === product.id && !isInactive ? (
+                          <input
+                            type="number"
+                            min="0"
+                            inputMode="numeric"
+                            value={editingValue}
+                            autoFocus
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onBlur={() => handleCommitEditingCount(product.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.currentTarget.blur();
+                              }
+                              if (e.key === 'Escape') {
+                                setEditingProductId(null);
+                                setEditingValue('');
+                              }
+                            }}
+                            className="w-14 h-8 text-center font-bold text-base text-slate-700 border border-indigo-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                            aria-label={`Quantidade de ${product.name}`}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!isInactive) {
+                                handleStartEditingCount(product.id, counted);
+                              }
+                            }}
+                            disabled={isInactive}
+                            className={`w-12 text-center font-bold text-base rounded-lg px-1 py-1 transition-colors ${
+                              isLowStock && !isInactive
+                                ? 'text-amber-600 hover:bg-amber-100'
+                                : isInactive
+                                  ? 'text-slate-400 cursor-not-allowed'
+                                  : 'text-slate-700 hover:bg-slate-100'
+                            }`}
+                            title={isInactive ? 'Produto inativo' : 'Clique para digitar a quantidade'}
+                          >
+                            {counted}
+                          </button>
+                        )}
                         <button
                           onClick={() => {
                             if (!isInactive) {
