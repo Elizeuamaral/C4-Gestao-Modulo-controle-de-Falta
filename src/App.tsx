@@ -134,7 +134,7 @@ export default function App() {
         category: String(prod.category || 'Outros').trim() || 'Outros',
         supplier: String(prod.supplier || 'Outros').trim() || 'Outros',
         minStock: Number(prod.minStock) || 0,
-        unit: String(prod.unit || 'un').trim() || 'un',
+        unit: String(prod.unit || '').trim(),
         active: prod.active !== false
       });
     });
