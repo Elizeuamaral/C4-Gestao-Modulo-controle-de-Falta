@@ -64,7 +64,9 @@ export default function ExcelImporter({ onImport }: ExcelImporterProps) {
       const minStockRaw = String(row[indexMap.minStock] || '').trim();
       const minStock = parseInt(minStockRaw.replace(/[^\d]/g, ''), 10) || 0;
 
-      if (!id || !name || !category || !supplier || !unit || !status) continue;
+      // Unidade e Estoque Necessário podem ficar em branco.
+      // Unidade vazia é mantida como string vazia e estoque vazio assume 0.
+      if (!id || !name || !category || !supplier || !status) continue;
 
       products.push({
         id,
@@ -227,9 +229,7 @@ export default function ExcelImporter({ onImport }: ExcelImporterProps) {
           onDragOver={handleDrag}
           onDragLeave={handleDrag}
           onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer flex flex-col items-center justify-center ${
-            dragActive ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
-          }`}
+          className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer flex flex-col items-center justify-center ${dragActive ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'}`}
           id="dropzone-container"
           onClick={() => document.getElementById('csv-file-input')?.click()}
         >
@@ -259,7 +259,7 @@ export default function ExcelImporter({ onImport }: ExcelImporterProps) {
             id="paste-area"
             value={pasteText}
             onChange={handlePasteChange}
-            placeholder="Código/ID&#9;Nome do Produto&#9;Categoria&#9;Fornecedor&#9;Estoque Necessário&#9;Unidade&#9;Status&#10;1001&#9;Coca Cola 2L&#9;Bebidas&#9;Coca-Cola&#9;10&#9;un&#9;Ativo"
+            placeholder="Código/ID\tNome do Produto\tCategoria\tFornecedor\tEstoque Necessário\tUnidade\tStatus\n1001\tCoca Cola 2L\tBebidas\tCoca-Cola\t10\tun\tAtivo"
             className="w-full h-36 p-3 text-xs font-mono border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-slate-50/50"
           />
         </div>
@@ -331,6 +331,7 @@ export default function ExcelImporter({ onImport }: ExcelImporterProps) {
           <ul className="list-disc list-inside space-y-0.5">
             <li>Deve ter uma linha de cabeçalho no topo.</li>
             <li>Colunas obrigatórias: <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Código/ID</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Nome do Produto</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Categoria</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Fornecedor</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Estoque Necessário</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Unidade</code> e <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Status</code>.</li>
+            <li>Os campos <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Unidade</code> e <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Estoque Necessário</code> podem ficar em branco. Quando o estoque estiver vazio, será considerado 0.</li>
             <li>Você pode simplesmente copiar uma tabela selecionada no Excel e colar no modo "Copiar e Colar".</li>
           </ul>
         </div>
