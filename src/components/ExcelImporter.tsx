@@ -38,12 +38,21 @@ export default function ExcelImporter({ onImport }: ExcelImporterProps) {
       name: headers.findIndex(h => h === 'nome do produto' || h === 'produto' || h === 'nome'),
       category: headers.findIndex(h => h === 'categoria'),
       supplier: headers.findIndex(h => h === 'fornecedor'),
-      minStock: headers.findIndex(h => h === 'estoque necessário' || h === 'estoque necessario'),
-      unit: headers.findIndex(h => h === 'unidade' || h === 'un'),
+      minStock: headers.findIndex(h =>
+        h === 'estoque necessário' ||
+        h === 'estoque necessario' ||
+        h === 'estoque' ||
+        h === 'quantidade' ||
+        h === 'qtd' ||
+        h === 'qtd.' ||
+        h === 'qtd necessária' ||
+        h === 'qtd necessaria'
+      ),
+      unit: headers.findIndex(h => h === 'unidade' || h === 'un' || h === 'unid' || h === 'unidade de medida'),
       status: headers.findIndex(h => h === 'status')
     };
 
-    const requiredFields: Array<keyof typeof indexMap> = ['id', 'name', 'category', 'supplier', 'minStock', 'unit', 'status'];
+    const requiredFields: Array<keyof typeof indexMap> = ['id', 'name', 'category', 'supplier', 'status'];
     const missing = requiredFields.filter((field) => indexMap[field] === -1);
     if (missing.length > 0) {
       throw new Error('Cabeçalho inválido. Use exatamente as colunas: Código/ID, Nome do Produto, Categoria, Fornecedor, Estoque Necessário, Unidade, Status.');
@@ -59,9 +68,9 @@ export default function ExcelImporter({ onImport }: ExcelImporterProps) {
       const name = String(row[indexMap.name] || '').trim();
       const category = String(row[indexMap.category] || '').trim();
       const supplier = String(row[indexMap.supplier] || '').trim();
-      const unit = String(row[indexMap.unit] || '').trim();
+      const unit = indexMap.unit >= 0 ? String(row[indexMap.unit] || '').trim() : '';
       const status = String(row[indexMap.status] || '').trim();
-      const minStockRaw = String(row[indexMap.minStock] || '').trim();
+      const minStockRaw = indexMap.minStock >= 0 ? String(row[indexMap.minStock] || '').trim() : '';
       const minStock = parseInt(minStockRaw.replace(/[^\d]/g, ''), 10) || 0;
 
       // Unidade e Estoque Necessário podem ficar em branco.
@@ -331,7 +340,7 @@ export default function ExcelImporter({ onImport }: ExcelImporterProps) {
           <ul className="list-disc list-inside space-y-0.5">
             <li>Deve ter uma linha de cabeçalho no topo.</li>
             <li>Colunas obrigatórias: <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Código/ID</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Nome do Produto</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Categoria</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Fornecedor</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Estoque Necessário</code>, <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Unidade</code> e <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Status</code>.</li>
-            <li>Os campos <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Unidade</code> e <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Estoque Necessário</code> podem ficar em branco. Quando o estoque estiver vazio, será considerado 0.</li>
+            <li>Os campos <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Unidade</code> e <code className="bg-slate-200/60 px-1 py-0.5 rounded text-indigo-600 font-mono">Estoque Necessário</code> podem ficar em branco ou até não existir na planilha. Quando o estoque estiver vazio, será considerado 0.</li>
             <li>Você pode simplesmente copiar uma tabela selecionada no Excel e colar no modo "Copiar e Colar".</li>
           </ul>
         </div>
